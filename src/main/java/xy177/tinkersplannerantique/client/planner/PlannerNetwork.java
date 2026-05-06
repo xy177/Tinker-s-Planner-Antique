@@ -1,15 +1,29 @@
 package xy177.tinkersplannerantique.client.planner;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import c4.conarm.common.inventory.ContainerArmorStation;
+import c4.conarm.common.inventory.SlotArmorStationIn;
+import c4.conarm.common.inventory.SlotArmorStationOut;
+import c4.conarm.lib.armor.ArmorCore;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.inventory.Container;
+import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
 import net.minecraftforge.fml.relauncher.Side;
+import slimeknights.tconstruct.library.tools.ToolCore;
 import slimeknights.tconstruct.library.tinkering.TinkersItem;
+import slimeknights.tconstruct.tools.common.inventory.ContainerToolStation;
+import slimeknights.tconstruct.tools.common.inventory.SlotToolStationIn;
+import slimeknights.tconstruct.tools.common.inventory.SlotToolStationOut;
 import c4.conarm.lib.tinkering.TinkersArmor;
 import xy177.tinkersplannerantique.PlannerConfig;
 
@@ -23,6 +37,8 @@ public final class PlannerNetwork {
     public static void init() {
         CHANNEL.registerMessage(ShareHandler.class, BlueprintSharePacket.class, 0, Side.SERVER);
         CHANNEL.registerMessage(GiveItemHandler.class, GiveItemPacket.class, 1, Side.SERVER);
+        CHANNEL.registerMessage(AssembleItemHandler.class, AssembleItemPacket.class, 2, Side.SERVER);
+        CHANNEL.registerMessage(AssembleResultHandler.class, AssembleResultPacket.class, 3, Side.CLIENT);
     }
 
     public static void sendShare(BlueprintSharePacket packet) {
@@ -31,6 +47,10 @@ public final class PlannerNetwork {
 
     public static void sendGiveItem(ItemStack stack) {
         CHANNEL.sendToServer(new GiveItemPacket(stack));
+    }
+
+    public static void sendAssemble(ItemStack target, List<ItemStack> parts, boolean armor) {
+        CHANNEL.sendToServer(new AssembleItemPacket(target, parts, armor));
     }
 
     public static class ShareHandler implements IMessageHandler<BlueprintSharePacket, IMessage> {
@@ -73,6 +93,153 @@ public final class PlannerNetwork {
 
         private boolean isPlannerItem(ItemStack stack) {
             return stack.getItem() instanceof TinkersItem || stack.getItem() instanceof TinkersArmor;
+        }
+    }
+
+    public static class AssembleItemHandler implements IMessageHandler<AssembleItemPacket, IMessage> {
+        @Override
+        public IMessage onMessage(AssembleItemPacket message, MessageContext ctx) {
+            EntityPlayerMP player = ctx.getServerHandler().player;
+            ItemStack target = message.getTarget().isEmpty() ? ItemStack.EMPTY : message.getTarget().copy();
+            List<ItemStack> parts = new ArrayList<>();
+            for (ItemStack part : message.getParts()) {
+                if (!part.isEmpty()) {
+                    ItemStack copy = part.copy();
+                    copy.setCount(1);
+                    parts.add(copy);
+                }
+            }
+            player.getServerWorld().addScheduledTask(() -> assemble(player, target, parts, message.isArmor()));
+            return null;
+        }
+
+        private void assemble(EntityPlayerMP player, ItemStack target, List<ItemStack> parts, boolean armor) {
+            if (target.isEmpty() || parts.isEmpty() || parts.size() > 6) {
+                return;
+            }
+            Container container = player.openContainer;
+            List<Slot> inputSlots = getInputSlots(container, armor);
+            if (inputSlots.size() < parts.size() || !selectTarget(container, target, parts.size(), armor)) {
+                sendResult(player, "gui.tpa.assemble_no_station", 0, 0, 0);
+                return;
+            }
+
+            int placed = 0;
+            int missing = 0;
+            int incorrect = 0;
+            List<String> details = new ArrayList<>();
+            for (int i = 0; i < parts.size(); i++) {
+                Slot input = inputSlots.get(i);
+                ItemStack expected = parts.get(i);
+                ItemStack current = input.getStack();
+                if (!current.isEmpty()) {
+                    if (!matches(current, expected)) {
+                        incorrect++;
+                        details.add("I\t" + expected.getDisplayName() + "\t" + current.getDisplayName());
+                        player.sendMessage(new TextComponentTranslation("gui.tpa.assemble_incorrect", expected.getDisplayName(), current.getDisplayName()));
+                    }
+                    continue;
+                }
+                if (!input.isItemValid(expected)) {
+                    incorrect++;
+                    details.add("I\t" + expected.getDisplayName() + "\t-");
+                    player.sendMessage(new TextComponentTranslation("gui.tpa.assemble_incorrect", expected.getDisplayName(), "-"));
+                    continue;
+                }
+                Slot source = findPlayerSlot(container, player, expected);
+                if (source == null) {
+                    missing++;
+                    details.add("M\t" + expected.getDisplayName());
+                    player.sendMessage(new TextComponentTranslation("gui.tpa.assemble_missing", expected.getDisplayName()));
+                    continue;
+                }
+                moveOne(source, input, expected);
+                placed++;
+            }
+
+            player.inventory.markDirty();
+            container.detectAndSendChanges();
+            ITextComponent result = new TextComponentTranslation("gui.tpa.assemble_done", placed, missing, incorrect);
+            player.sendMessage(result);
+            sendResult(player, "gui.tpa.assemble_done", placed, missing, incorrect, details);
+        }
+
+        private void sendResult(EntityPlayerMP player, String translationKey, int placed, int missing, int incorrect) {
+            sendResult(player, translationKey, placed, missing, incorrect, new ArrayList<>());
+        }
+
+        private void sendResult(EntityPlayerMP player, String translationKey, int placed, int missing, int incorrect, List<String> details) {
+            CHANNEL.sendTo(new AssembleResultPacket(translationKey, placed, missing, incorrect, details), player);
+        }
+
+        private boolean selectTarget(Container container, ItemStack target, int activeSlots, boolean armor) {
+            if (armor) {
+                if (!(container instanceof ContainerArmorStation) || !(target.getItem() instanceof ArmorCore)) {
+                    return false;
+                }
+                ((ContainerArmorStation) container).setArmorSelection((ArmorCore) target.getItem(), activeSlots);
+                return true;
+            }
+            if (!(container instanceof ContainerToolStation) || !(target.getItem() instanceof ToolCore)) {
+                return false;
+            }
+            ((ContainerToolStation) container).setToolSelection((ToolCore) target.getItem(), activeSlots);
+            return true;
+        }
+
+        private List<Slot> getInputSlots(Container container, boolean armor) {
+            List<Slot> slots = new ArrayList<>();
+            if (container == null) {
+                return slots;
+            }
+            for (Slot slot : container.inventorySlots) {
+                if (armor ? slot instanceof SlotArmorStationIn : slot instanceof SlotToolStationIn) {
+                    slots.add(slot);
+                }
+            }
+            return slots;
+        }
+
+        private Slot findPlayerSlot(Container container, EntityPlayerMP player, ItemStack expected) {
+            for (Slot slot : container.inventorySlots) {
+                if (slot instanceof SlotToolStationIn || slot instanceof SlotToolStationOut || slot instanceof SlotArmorStationIn || slot instanceof SlotArmorStationOut) {
+                    continue;
+                }
+                if (slot.inventory == player.inventory && matches(slot.getStack(), expected)) {
+                    return slot;
+                }
+            }
+            return null;
+        }
+
+        private boolean matches(ItemStack stack, ItemStack expected) {
+            return !stack.isEmpty() && ItemStack.areItemsEqual(stack, expected) && ItemStack.areItemStackTagsEqual(stack, expected);
+        }
+
+        private void moveOne(Slot source, Slot input, ItemStack expected) {
+            ItemStack sourceStack = source.getStack();
+            if (sourceStack.isEmpty()) {
+                return;
+            }
+            ItemStack placed = expected.copy();
+            placed.setCount(1);
+            sourceStack.shrink(1);
+            if (sourceStack.getCount() <= 0) {
+                source.putStack(ItemStack.EMPTY);
+            } else {
+                source.putStack(sourceStack);
+            }
+            input.putStack(placed);
+            source.onSlotChanged();
+            input.onSlotChanged();
+        }
+    }
+
+    public static class AssembleResultHandler implements IMessageHandler<AssembleResultPacket, IMessage> {
+        @Override
+        public IMessage onMessage(AssembleResultPacket message, MessageContext ctx) {
+            PlannerClientEvents.handleAssemblyResult(message.getTranslationKey(), message.getPlaced(), message.getMissing(), message.getIncorrect(), message.getDetails());
+            return null;
         }
     }
 }

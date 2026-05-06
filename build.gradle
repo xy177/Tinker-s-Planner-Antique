@@ -22,7 +22,10 @@ ext {
     modName = 'Tinkers Planner Antique'
     modVersion = version
     modAuthor = 'xy177'
-    modDescription = 'A Minecraft 1.12.2 addon workspace targeting Tinkers Antique and Antique Armory.'
+    modDescription = 'Plan Tinkers Antique tools and Antique Armory armor before crafting them. Choose materials, modifiers, embossments, bookmarks, and blueprint codes, then preview or assemble the required parts from a Tinker Station or Armor Station.'
+    modCredits = 'Built for Tinkers Antique and Antique Armory integration.'
+    modUrl = 'https://github.com/xy177/Tinker-s-Planner-Antique'
+    modLogoFile = 'assets/tinkersplannerantique/textures/logo.png'
     minecraftVersion = '1.12.2'
 }
 
@@ -106,6 +109,9 @@ processResources {
     inputs.property 'name', modName
     inputs.property 'author', modAuthor
     inputs.property 'description', modDescription
+    inputs.property 'credits', modCredits
+    inputs.property 'url', modUrl
+    inputs.property 'logoFile', modLogoFile
 
     from(sourceSets.main.resources.srcDirs) {
         include 'mcmod.info'
@@ -117,7 +123,10 @@ processResources {
             modid: modId,
             name: modName,
             author: modAuthor,
-            description: modDescription
+            description: modDescription,
+            credits: modCredits,
+            url: modUrl,
+            logoFile: modLogoFile
         )
     }
 

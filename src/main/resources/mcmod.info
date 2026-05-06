@@ -5,11 +5,11 @@
   "description": "${description}",
   "version": "${version}",
   "mcversion": "${mcversion}",
-  "url": "",
+  "url": "${url}",
   "updateUrl": "",
   "authorList": ["${author}"],
-  "credits": "Built from a Forge 1.12.2 template and prepared for Tinkers Antique / Antique Armory integration.",
-  "logoFile": "",
+  "credits": "${credits}",
+  "logoFile": "${logoFile}",
   "screenshots": [],
   "dependencies": ["required-after:tconstruct", "required-after:conarm"]
 }

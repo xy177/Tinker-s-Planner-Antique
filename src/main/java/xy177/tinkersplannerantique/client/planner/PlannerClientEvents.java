@@ -2,6 +2,7 @@ package xy177.tinkersplannerantique.client.planner;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -15,6 +16,7 @@ import c4.conarm.lib.armor.ArmorCore;
 import c4.conarm.lib.client.ArmorBuildGuiInfo;
 import c4.conarm.common.inventory.SlotArmorStationOut;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
@@ -48,6 +50,8 @@ public final class PlannerClientEvents {
     private static List<ToolPlannerTarget> toolTargets;
     private static List<ArmorPlannerTarget> armorTargets;
     private static PlannerOpenButton openButton;
+    private static String assemblyNotice;
+    private static long assemblyNoticeUntil;
 
     private PlannerClientEvents() {
     }
@@ -104,19 +108,123 @@ public final class PlannerClientEvents {
         return all;
     }
 
+    static void showAssemblyNotice(String translationKey, int placed, int missing, int incorrect) {
+        showAssemblyNotice(translationKey, placed, missing, incorrect, Collections.emptyList());
+    }
+
+    static void showAssemblyNotice(String translationKey, int placed, int missing, int incorrect, List<String> details) {
+        if ("gui.tpa.assemble_done".equals(translationKey)) {
+            assemblyNotice = I18n.translateToLocalFormatted(translationKey, placed, missing, incorrect);
+        } else {
+            assemblyNotice = I18n.translateToLocal(translationKey);
+        }
+        assemblyNoticeUntil = System.currentTimeMillis() + 4000L;
+        applyAssemblyNoticeToCurrentStation(details);
+    }
+
+    static void handleAssemblyResult(String translationKey, int placed, int missing, int incorrect, List<String> details) {
+        Minecraft.getMinecraft().addScheduledTask(() -> showAssemblyNotice(translationKey, placed, missing, incorrect, details));
+    }
+
+    private static void applyAssemblyNoticeToCurrentStation(List<String> details) {
+        Minecraft mc = Minecraft.getMinecraft();
+        GuiScreen screen = mc.currentScreen;
+        if (!(screen instanceof GuiToolStation) && !(screen instanceof GuiArmorStation)) {
+            return;
+        }
+        List<String> lines = new ArrayList<>();
+        if (assemblyNotice != null && !assemblyNotice.isEmpty()) {
+            lines.add(assemblyNotice);
+        }
+        for (String detail : details) {
+            String[] parts = detail.split("\t", -1);
+            if (parts.length >= 2 && "M".equals(parts[0])) {
+                lines.add(I18n.translateToLocalFormatted("gui.tpa.assemble_missing", parts[1]));
+            } else if (parts.length >= 3 && "I".equals(parts[0])) {
+                lines.add(I18n.translateToLocalFormatted("gui.tpa.assemble_incorrect", parts[1], parts[2]));
+            }
+        }
+        if (lines.isEmpty()) {
+            return;
+        }
+        if (!setStationInfoPanel(screen, details.isEmpty() ? "gui.tpa.assemble_caption" : "gui.warning", lines)) {
+            if (screen instanceof GuiToolStation) {
+                ((GuiToolStation) screen).warning(lines.get(0));
+            } else if (screen instanceof GuiArmorStation) {
+                ((GuiArmorStation) screen).warning(lines.get(0));
+            }
+        }
+    }
+
+    private static boolean setStationInfoPanel(GuiScreen screen, String captionKey, List<String> lines) {
+        try {
+            Object panel = readField(screen, screen instanceof GuiToolStation ? "toolInfo" : "armorInfo");
+            Object traitPanel = readField(screen, "traitInfo");
+            if (panel == null) {
+                return false;
+            }
+            Method setCaption = panel.getClass().getMethod("setCaption", String.class);
+            Method setText = panel.getClass().getMethod("setText", List.class);
+            setCaption.invoke(panel, I18n.translateToLocal(captionKey));
+            setText.invoke(panel, lines);
+            if (traitPanel != null) {
+                setCaption.invoke(traitPanel, new Object[] { null });
+                setText.invoke(traitPanel, Collections.emptyList());
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static Object readField(Object target, String name) throws IllegalAccessException {
+        Class<?> type = target.getClass();
+        while (type != null) {
+            try {
+                Field field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.get(target);
+            } catch (NoSuchFieldException ignored) {
+                type = type.getSuperclass();
+            }
+        }
+        return null;
+    }
+
     @SubscribeEvent
     public static void onInitGui(GuiScreenEvent.InitGuiEvent.Post event) {
         GuiScreen gui = event.getGui();
         if (gui instanceof GuiToolStation || gui instanceof GuiArmorStation) {
             openButton = createOpenButton(gui);
+            event.getButtonList().add(openButton);
         }
     }
 
     @SubscribeEvent
     public static void onDrawScreenPost(GuiScreenEvent.DrawScreenEvent.Post event) {
         if (openButton != null && openButton.owner == event.getGui()) {
-            openButton.drawOverlay(Minecraft.getMinecraft(), event.getMouseX(), event.getMouseY());
+            openButton.drawTooltip(Minecraft.getMinecraft(), event.getMouseX(), event.getMouseY());
         }
+        drawAssemblyNotice(event.getGui());
+    }
+
+    private static void drawAssemblyNotice(GuiScreen gui) {
+        if (assemblyNotice == null || System.currentTimeMillis() > assemblyNoticeUntil) {
+            assemblyNotice = null;
+            return;
+        }
+        if (!(gui instanceof GuiToolStation) && !(gui instanceof GuiArmorStation)) {
+            return;
+        }
+        Minecraft mc = Minecraft.getMinecraft();
+        int textWidth = mc.fontRenderer.getStringWidth(assemblyNotice);
+        int width = Math.min(gui.width - 20, textWidth + 20);
+        int x = (gui.width - width) / 2;
+        int y = 10;
+        GlStateManager.disableDepth();
+        Gui.drawRect(x, y, x + width, y + 22, 0xD0203040);
+        mc.fontRenderer.drawStringWithShadow(assemblyNotice, x + (width - textWidth) / 2, y + 7, 0xFFFFFF);
+        GlStateManager.enableDepth();
     }
 
     @SubscribeEvent
@@ -217,25 +325,19 @@ public final class PlannerClientEvents {
                 return;
             }
             hovered = mouseX >= x && mouseY >= y && mouseX < x + width && mouseY < y + height;
-        }
-
-        private void drawOverlay(Minecraft mc, int mouseX, int mouseY) {
-            if (!visible) {
-                return;
-            }
-            hovered = mouseX >= x && mouseY >= y && mouseX < x + width && mouseY < y + height;
             mc.getTextureManager().bindTexture(SIMULATE_BUILD_ICON);
             GlStateManager.pushMatrix();
             GlStateManager.disableLighting();
-            GlStateManager.disableDepth();
             GlStateManager.enableTexture2D();
             GlStateManager.enableBlend();
             GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
             GlStateManager.color(1F, 1F, 1F, hovered ? 1F : 0.8F);
             drawModalRectWithCustomSizedTexture(x + 2, y + 2, 0, 0, 16, 16, 16, 16);
             GlStateManager.color(1F, 1F, 1F, 1F);
-            GlStateManager.enableDepth();
             GlStateManager.popMatrix();
+        }
+
+        private void drawTooltip(Minecraft mc, int mouseX, int mouseY) {
             if (hovered) {
                 GuiUtils.drawHoveringText(Collections.singletonList(I18n.translateToLocal("gui.tpa.simulate_build")), mouseX, mouseY, mc.currentScreen.width, mc.currentScreen.height, -1, mc.fontRenderer);
             }

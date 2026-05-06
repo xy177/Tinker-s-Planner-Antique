@@ -76,6 +76,7 @@ public class PlannerScreen extends GuiScreen {
     private static final ResourceLocation ICON_MODIFIERS_OPEN = icon("modifiers_open");
     private static final ResourceLocation ICON_MODIFIERS_CLOSE = icon("modifiers_close");
     private static final ResourceLocation ICON_GIVE_ITEM = icon("give_item");
+    private static final ResourceLocation ICON_ASSEMBLE = icon("simulate_build");
     private static final ResourceLocation ICON_EXPORT_BLUEPRINT = icon("export_blueprint");
     private static final ResourceLocation ICON_IMPORT_BLUEPRINT = icon("import_blueprint");
     private static final ResourceLocation ICON_SORT_ATTACK = icon("sort_attack");
@@ -404,6 +405,13 @@ public class PlannerScreen extends GuiScreen {
                 @Override
                 public void press(int mouseButton) {
                     giveCurrentItem();
+                }
+            });
+        } else if (complete && shouldReplaceGiveWithAssemble()) {
+            addActionButton(actionX + 36, actionY, ICON_ASSEMBLE, tooltip("gui.tpa.assemble"), canUseAssemble(), new PressHandler() {
+                @Override
+                public void press(int mouseButton) {
+                    assembleCurrentItem();
                 }
             });
         }
@@ -1135,6 +1143,48 @@ public class PlannerScreen extends GuiScreen {
 
     private boolean canUseGiveItem() {
         return mc.player != null && (!PlannerConfig.creativeOnlyGiveItem || mc.player.capabilities.isCreativeMode);
+    }
+
+    private boolean shouldReplaceGiveWithAssemble() {
+        return mc.player != null && PlannerConfig.creativeOnlyGiveItem && !mc.player.capabilities.isCreativeMode;
+    }
+
+    private boolean canUseAssemble() {
+        return blueprint != null && blueprint.isComplete() && (parent instanceof GuiToolStation || parent instanceof GuiArmorStation);
+    }
+
+    private void assembleCurrentItem() {
+        if (mc.player == null || blueprint == null || !canUseAssemble()) {
+            printLocalText(I18n.translateToLocal("gui.tpa.assemble_no_station"));
+            return;
+        }
+        List<ItemStack> parts = getAssemblyParts();
+        if (parts.isEmpty()) {
+            return;
+        }
+        PlannerNetwork.sendAssemble(blueprint.target.getRenderStack(), parts, blueprint.target.getType() == PlannerTarget.TargetType.ARMOR);
+        PlannerClientEvents.showAssemblyNotice("gui.tpa.assemble_sent", 0, 0, 0);
+        mc.displayGuiScreen(parent);
+    }
+
+    private List<ItemStack> getAssemblyParts() {
+        List<ItemStack> parts = new ArrayList<>();
+        List<PartMaterialType> required = blueprint.target.getRequiredComponents();
+        for (int i = 0; i < required.size(); i++) {
+            Material material = i < blueprint.materials.length ? blueprint.materials[i] : null;
+            IToolPart part = getDisplayPart(required.get(i));
+            if (material == null || part == null) {
+                return Collections.emptyList();
+            }
+            ItemStack stack = getPartDisplayStack(i, part, material);
+            if (stack.isEmpty()) {
+                return Collections.emptyList();
+            }
+            stack = stack.copy();
+            stack.setCount(1);
+            parts.add(stack);
+        }
+        return parts;
     }
 
     private void exportBlueprintCode() {
