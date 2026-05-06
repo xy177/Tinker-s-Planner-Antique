@@ -1,0 +1,16 @@
+[
+{
+  "modid": "${modid}",
+  "name": "${name}",
+  "description": "${description}",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["${author}"],
+  "credits": "Built from a Forge 1.12.2 template and prepared for Tinkers Antique / Antique Armory integration.",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": ["required-after:tconstruct", "required-after:conarm"]
+}
+]
