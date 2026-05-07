@@ -6,13 +6,6 @@ Tinkers Planner Antique is a helper mod for planning Tinkers' Construct tools an
 If you often compare materials, modifier slots, traits, and special stats from addon mods in large modpacks, this mod lets you handle most of that trial and error in one place.
 
 
-Version 1.0.2
--------------
-
-- Added `/ticpa test print json` to export the current environment's tool, material, trait, modifier, and part registry names into a JSON file with both English and Chinese localized names.
-- The JSON export excludes special emboss entries, second emboss entries, and material-special entries.
-
-
 Feature Overview
 ----------------
 
@@ -84,13 +77,6 @@ Config
 匠魂蓝图怀古/意研订斟 是一个用于设计匠魂工具和匠魂护甲蓝图的辅助模组。它提供了一个独立的蓝图界面，让你可以在真正制作前先搭配工具、护甲、部件、材料、强化和刻印，并直接查看预览结果。
 
 如果你经常在大型整合包里反复比较材料、强化槽、特性和各种附属模组带来的特殊属性，这个模组可以让这些试错过程集中在一个界面里完成。
-
-
-1.0.2 更新日志
---------------
-
-- 新增 `/ticpa test print json`，可将当前环境中的工具、材料、特性、强化和部件注册名导出为 JSON 文件，并附带英文和中文本地化名称。
-- 导出的内容会自动排除特殊刻印、刻印2以及材料特殊项。
 
 
 功能概览
