@@ -26,6 +26,7 @@ import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.util.ITooltipFlag;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Item;
 import net.minecraft.util.NonNullList;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.ResourceLocation;
@@ -197,6 +198,7 @@ public class PlannerScreen extends GuiScreen {
     private final List<PlannerActionButton> actionButtons = new ArrayList<>();
     private final List<PanelModifierButton> modifierButtons = new ArrayList<>();
     private final List<TraitFilterButton> traitButtons = new ArrayList<>();
+    private final Map<String, ItemStack> representativeMaterialStacks = new HashMap<>();
     private ItemStack deferredTooltipStack = ItemStack.EMPTY;
     private List<String> deferredTooltipLines;
     private String selectedTraitFilterId;
@@ -285,12 +287,9 @@ public class PlannerScreen extends GuiScreen {
         List<PartMaterialType> parts = blueprint.target.getRequiredComponents();
         for (int i = 0; i < parts.size() && i < positions.size(); i++) {
             IToolPart part = getDisplayPart(parts.get(i));
-            if (part == null) {
-                continue;
-            }
             ItemStack stack = getPartDisplayStack(i, part, blueprint.materials[i]);
             int[] pos = positions.get(i);
-            partButtons.add(new PanelItemButton(ID_PART_BASE + i, centerLeft, centerTop, pos[0] + 13, pos[1] + 15, stack, stack, part.getOutlineRenderStack().getDisplayName(), selectedPart == i, true));
+            partButtons.add(new PanelItemButton(ID_PART_BASE + i, centerLeft, centerTop, pos[0] + 13, pos[1] + 15, stack, stack, getPartDisplayName(parts.get(i), part, i), selectedPart == i, true));
         }
     }
 
@@ -1080,8 +1079,8 @@ public class PlannerScreen extends GuiScreen {
             return;
         }
         for (int i = 0; i < blueprint.materials.length; i++) {
-            IToolPart part = getDisplayPart(blueprint.target.getRequiredComponents().get(i));
-            List<Material> materials = getUsableMaterials(part);
+            PartMaterialType partType = blueprint.target.getRequiredComponents().get(i);
+            List<Material> materials = getUsableMaterials(partType);
             if (!materials.isEmpty()) {
                 blueprint.materials[i] = materials.get(random.nextInt(materials.size()));
             }
@@ -1287,22 +1286,54 @@ public class PlannerScreen extends GuiScreen {
         for (IToolPart part : partType.getPossibleParts()) {
             return part;
         }
+        for (Item item : Item.REGISTRY) {
+            if (item instanceof IToolPart && partType.isValidItem((IToolPart) item)) {
+                return (IToolPart) item;
+            }
+        }
         return null;
     }
 
-    private List<Material> getSortedMaterials(IToolPart part, PartMaterialType partType) {
-        List<Material> materials = getUsableMaterials(part);
+    private String getPartDisplayName(PartMaterialType partType, IToolPart part, int partIndex) {
+        if (part != null) {
+            return part.getOutlineRenderStack().getDisplayName();
+        }
+        for (String statType : getUsedStatTypes(partType)) {
+            IMaterialStats stats = findSampleStats(partType, statType);
+            if (stats != null) {
+                return stats.getLocalizedName();
+            }
+        }
+        return I18n.translateToLocal("gui.tpa.part") + " " + (partIndex + 1);
+    }
+
+    private List<String> getUsedStatTypes(PartMaterialType partType) {
+        return PlannerUiCache.getUsedStatTypes(partType, type);
+    }
+
+    private List<Material> getSortedMaterials(PartMaterialType partType) {
+        List<Material> materials = getUsableMaterials(partType);
         if (activeSort != null) {
             materials.sort((left, right) -> activeSort.compare(getPrimaryStatType(partType), left, right));
         }
         return materials;
     }
 
-    private List<Material> getUsableMaterials(IToolPart part) {
+    private List<Material> getUsableMaterials(PartMaterialType partType) {
         List<Material> materials = new ArrayList<>();
         for (Material material : TinkerRegistry.getAllMaterials()) {
-            if (part != null && part.canUseMaterial(material)) {
+            if (partType != null && partType.isValidMaterial(material)) {
                 materials.add(material);
+            }
+        }
+        if (materials.isEmpty()) {
+            IToolPart part = getDisplayPart(partType);
+            if (part != null) {
+                for (Material material : TinkerRegistry.getAllMaterials()) {
+                    if (material != null && material != Material.UNKNOWN && part.canUseMaterialForRendering(material)) {
+                        materials.add(material);
+                    }
+                }
             }
         }
         return materials;
@@ -1329,11 +1360,8 @@ public class PlannerScreen extends GuiScreen {
         }
         PartMaterialType partType = blueprint.target.getRequiredComponents().get(selectedPart);
         IToolPart part = getDisplayPart(blueprint.target.getRequiredComponents().get(selectedPart));
-        if (part == null) {
-            return Collections.emptyList();
-        }
         List<MaterialOption> options = new ArrayList<>();
-        for (Material material : getSortedMaterials(part, partType)) {
+        for (Material material : getSortedMaterials(partType)) {
             if (selectedTraitFilterId != null && !getPartTraitIdentifiers(partType, material).contains(selectedTraitFilterId)) {
                 continue;
             }
@@ -1356,16 +1384,13 @@ public class PlannerScreen extends GuiScreen {
         }
         PartMaterialType partType = blueprint.target.getRequiredComponents().get(selectedPart);
         IToolPart part = getDisplayPart(partType);
-        if (part == null) {
-            return Collections.emptyList();
-        }
         Map<String, TraitFilterEntry> traits = new LinkedHashMap<>();
         Set<String> traitLabels = new LinkedHashSet<>();
         Material selectedMaterial = blueprint.materials[selectedPart];
         if (selectedMaterial != null) {
             addMaterialTraits(traits, traitLabels, partType, selectedMaterial);
         } else {
-            for (Material material : getUsableMaterials(part)) {
+            for (Material material : getUsableMaterials(partType)) {
                 addMaterialTraits(traits, traitLabels, partType, material);
             }
         }
@@ -1378,11 +1403,7 @@ public class PlannerScreen extends GuiScreen {
         Map<String, TraitFilterEntry> traits = new LinkedHashMap<>();
         Set<String> traitLabels = new LinkedHashSet<>();
         for (PartMaterialType partType : blueprint.target.getRequiredComponents()) {
-            IToolPart part = getDisplayPart(partType);
-            if (part == null) {
-                continue;
-            }
-            for (Material material : getUsableMaterials(part)) {
+            for (Material material : getUsableMaterials(partType)) {
                 addMaterialTraits(traits, traitLabels, partType, material);
             }
         }
@@ -1403,6 +1424,9 @@ public class PlannerScreen extends GuiScreen {
     }
 
     private ItemStack getPartDisplayStack(int partIndex, IToolPart part, Material material) {
+        if (part == null) {
+            return getFallbackPartDisplayStack();
+        }
         if (blueprint != null && isBoltTarget(blueprint.target) && part instanceof BoltCore && material != null) {
             if (partIndex == 0) {
                 return BoltCore.getItemstackWithMaterials(material, TinkerMaterials.iron);
@@ -1417,6 +1441,13 @@ public class PlannerScreen extends GuiScreen {
         return part.getItemstackWithMaterial(material);
     }
 
+    private ItemStack getFallbackPartDisplayStack() {
+        if (blueprint != null && blueprint.target != null && !blueprint.target.getRenderStack().isEmpty()) {
+            return blueprint.target.getRenderStack();
+        }
+        return new ItemStack(Items.PAPER);
+    }
+
     private List<MaterialOption> getEmbossMaterialOptions(boolean second) {
         if (blueprint == null || selectedPart < 0 || selectedPart >= blueprint.materials.length) {
             return Collections.emptyList();
@@ -1428,7 +1459,7 @@ public class PlannerScreen extends GuiScreen {
         List<MaterialOption> options = new ArrayList<>();
         String selectedMaterialId = getModifierMaterialId(second ? blueprint.secondEmbossModifierId : blueprint.embossModifierId);
         PartMaterialType partType = blueprint.target.getRequiredComponents().get(selectedPart);
-        for (Material material : getSortedMaterials(part, partType)) {
+        for (Material material : getSortedMaterials(partType)) {
             IModifier modifier = second ? getSecondEmbossModifier(material, selectedPart) : getEmbossModifier(material, selectedPart);
             if (modifier != null) {
                 boolean highlighted = second ? blueprint.hasSecondEmboss() && blueprint.secondEmbossPartIndex == selectedPart : blueprint.hasEmboss() && blueprint.embossPartIndex == selectedPart;
@@ -1443,10 +1474,17 @@ public class PlannerScreen extends GuiScreen {
         if (blueprint == null) {
             return Collections.emptyList();
         }
+        String cacheKey = PlannerUiCache.buildSpecialModifiersCacheKey(blueprint.target);
+        List<String> cached = PlannerUiCache.getSpecialModifiers(cacheKey);
+        if (cached == null) {
+            cached = buildSpecialModifiersCache();
+            PlannerUiCache.putSpecialModifiers(cacheKey, cached);
+        }
         List<MaterialOption> options = new ArrayList<>();
         String selectedMaterialId = getModifierMaterialId(blueprint.materialModifierId);
-        for (IModifier modifier : getAvailableSpecialModifiers()) {
-            if (!isMaterialSpecialModifier(modifier)) {
+        for (String identifier : cached) {
+            IModifier modifier = blueprint.target.resolveModifier(identifier);
+            if (modifier == null || !isMaterialSpecialModifier(modifier)) {
                 continue;
             }
             Material material = getModifierMaterial(modifier);
@@ -1488,30 +1526,54 @@ public class PlannerScreen extends GuiScreen {
         if (material == null) {
             return null;
         }
-        for (IModifier modifier : getAvailableSpecialModifiers()) {
-            if (isEmbossModifier(modifier)) {
-                Material modifierMaterial = getModifierMaterial(modifier);
-                if (modifierMaterial != null && material.getIdentifier().equals(modifierMaterial.getIdentifier()) && matchesEmbossPart(modifier, partIndex)) {
-                    return modifier;
-                }
-            }
-        }
-        return null;
+        return getEmbossModifierFromCache(material, partIndex, false);
     }
 
     private IModifier getSecondEmbossModifier(Material material, int partIndex) {
         if (material == null) {
             return null;
         }
+        return getEmbossModifierFromCache(material, partIndex, true);
+    }
+
+    private IModifier getEmbossModifierFromCache(Material material, int partIndex, boolean second) {
+        if (blueprint == null || material == null) {
+            return null;
+        }
+        String key = getEmbossCacheKey(partIndex, second);
+        Map<String, String> cached = PlannerUiCache.getEmbossModifiers(key);
+        if (cached == null) {
+            cached = buildEmbossModifierCache(partIndex, second);
+            PlannerUiCache.putEmbossModifiers(key, cached);
+        }
+        String modifierId = cached.get(material.getIdentifier());
+        return modifierId == null || modifierId.isEmpty() ? null : blueprint.target.resolveModifier(modifierId);
+    }
+
+    static void rebuildUiCache(List<? extends PlannerTarget> targets) {
+        PlannerUiCache.rebuildAll(targets);
+    }
+
+    static void refreshUiCache() {
+        PlannerUiCache.clearMemory();
+        PlannerUiCache.rebuildAll(PlannerClientEvents.getAllTargets());
+    }
+
+    private Map<String, String> buildEmbossModifierCache(int partIndex, boolean second) {
+        Map<String, String> cache = new LinkedHashMap<>();
         for (IModifier modifier : getAvailableSpecialModifiers()) {
-            if (isSecondEmbossModifier(modifier)) {
+            if (second ? isSecondEmbossModifier(modifier) : isEmbossModifier(modifier)) {
                 Material modifierMaterial = getModifierMaterial(modifier);
-                if (modifierMaterial != null && material.getIdentifier().equals(modifierMaterial.getIdentifier()) && matchesEmbossPart(modifier, partIndex)) {
-                    return modifier;
+                if (modifierMaterial != null && matchesEmbossPart(modifier, partIndex)) {
+                    cache.put(modifierMaterial.getIdentifier(), modifier.getIdentifier());
                 }
             }
         }
-        return null;
+        return cache;
+    }
+
+    private String getEmbossCacheKey(int partIndex, boolean second) {
+        return PlannerUiCache.buildEmbossCacheKey(blueprint == null ? null : blueprint.target, partIndex, second);
     }
 
     private IModifier getMaterialSpecialModifier(Material material) {
@@ -1600,82 +1662,11 @@ public class PlannerScreen extends GuiScreen {
         if (blueprint == null || modifier == null || partIndex < 0 || partIndex >= blueprint.target.getRequiredComponents().size()) {
             return false;
         }
-        Set<String> modifierTraits = getModifierTraitIdentifiers(modifier);
-        Set<String> partTraits = getPartTraitIdentifiers(blueprint.target.getRequiredComponents().get(partIndex), getModifierMaterial(modifier));
-        return !modifierTraits.isEmpty() && modifierTraits.equals(partTraits);
-    }
-
-    private Set<String> getModifierTraitIdentifiers(IModifier modifier) {
-        Set<String> result = new LinkedHashSet<>();
-        Class<?> type = modifier.getClass();
-        while (type != null) {
-            for (Field field : type.getDeclaredFields()) {
-                try {
-                    field.setAccessible(true);
-                    Object value = field.get(modifier);
-                    if (!(value instanceof Collection)) {
-                        continue;
-                    }
-                    Collection<?> collection = (Collection<?>) value;
-                    if (collection.isEmpty()) {
-                        continue;
-                    }
-                    Object first = collection.iterator().next();
-                    if (!(first instanceof ITrait)) {
-                        continue;
-                    }
-                    for (Object entry : collection) {
-                        result.add(((ITrait) entry).getIdentifier());
-                    }
-                    return result;
-                } catch (IllegalAccessException ignored) {
-                }
-            }
-            type = type.getSuperclass();
-        }
-        return result;
+        return PlannerUiCache.matchesEmbossPart(blueprint.target, blueprint.target.getRequiredComponents().get(partIndex), modifier, partIndex);
     }
 
     private Set<String> getPartTraitIdentifiers(PartMaterialType partType, Material material) {
-        Set<String> result = new LinkedHashSet<>();
-        if (partType == null || material == null) {
-            return result;
-        }
-        for (String statType : getUsedStatTypes(partType)) {
-            for (ITrait trait : material.getAllTraitsForStats(statType)) {
-                result.add(trait.getIdentifier());
-            }
-        }
-        return result;
-    }
-
-    private List<String> getUsedStatTypes(PartMaterialType partType) {
-        List<String> statTypes = new ArrayList<>();
-        addUsedStatType(statTypes, partType, MaterialTypes.HEAD);
-        addUsedStatType(statTypes, partType, MaterialTypes.HANDLE);
-        addUsedStatType(statTypes, partType, MaterialTypes.EXTRA);
-        addUsedStatType(statTypes, partType, MaterialTypes.BOW);
-        addUsedStatType(statTypes, partType, MaterialTypes.BOWSTRING);
-        addUsedStatType(statTypes, partType, MaterialTypes.SHAFT);
-        addUsedStatType(statTypes, partType, MaterialTypes.FLETCHING);
-        addUsedStatType(statTypes, partType, MaterialTypes.PROJECTILE);
-        if (isYoyosLoaded()) {
-            addUsedStatType(statTypes, partType, YOYO_BODY);
-            addUsedStatType(statTypes, partType, YOYO_CORD);
-            addUsedStatType(statTypes, partType, YOYO_AXLE);
-        }
-        if (ConArmPresence.isLoaded()) {
-            addUsedStatType(statTypes, partType, ARMOR_CORE);
-            addUsedStatType(statTypes, partType, ARMOR_PLATES);
-            addUsedStatType(statTypes, partType, ARMOR_TRIM);
-        }
-        return statTypes;
-    }
-
-    private void addUsedStatType(List<String> statTypes, PartMaterialType partType, String statType) {
-        if (partType.usesStat(statType)) {
-            statTypes.add(statType);
-        }
+        return PlannerUiCache.getPartTraitIdentifiers(partType, material, type);
     }
 
     private ItemStack getSpecialMaterialDisplayStack(Material material) {
@@ -1726,6 +1717,16 @@ public class PlannerScreen extends GuiScreen {
         if (material == null) {
             return ItemStack.EMPTY;
         }
+        ItemStack cached = representativeMaterialStacks.get(material.getIdentifier());
+        if (cached != null) {
+            return cached.isEmpty() ? ItemStack.EMPTY : cached.copy();
+        }
+        ItemStack resolved = findRepresentativeMaterialStack(material);
+        representativeMaterialStacks.put(material.getIdentifier(), resolved.isEmpty() ? ItemStack.EMPTY : resolved.copy());
+        return resolved;
+    }
+
+    private ItemStack findRepresentativeMaterialStack(Material material) {
         for (String methodName : new String[] { "getRepresentativeItem", "getRepresentativeStack" }) {
             try {
                 Method method = material.getClass().getMethod(methodName);
@@ -1955,8 +1956,7 @@ public class PlannerScreen extends GuiScreen {
     }
 
     private IMaterialStats findSampleStats(PartMaterialType partType, String statType) {
-        IToolPart part = getDisplayPart(partType);
-        for (Material material : getUsableMaterials(part)) {
+        for (Material material : getUsableMaterials(partType)) {
             IMaterialStats stats = material.getStats(statType);
             if (stats != null) {
                 return stats;
@@ -1987,7 +1987,7 @@ public class PlannerScreen extends GuiScreen {
                 return statTypes;
             }
         }
-        return getUsedStatTypes(partType);
+        return Collections.emptyList();
     }
 
     private int modifierStateRank(IModifier modifier) {
@@ -2012,8 +2012,7 @@ public class PlannerScreen extends GuiScreen {
         for (int i = 0; i < parts.size(); i++) {
             Material material = i < blueprint.materials.length ? blueprint.materials[i] : null;
             if (material == null) {
-                IToolPart part = getDisplayPart(parts.get(i));
-                List<Material> usable = getUsableMaterials(part);
+                List<Material> usable = getUsableMaterials(parts.get(i));
                 if (usable.isEmpty()) {
                     return ItemStack.EMPTY;
                 }
@@ -2568,25 +2567,63 @@ public class PlannerScreen extends GuiScreen {
     }
 
     private ItemStack getModifierDisplayStack(IModifier modifier) {
-        List<List<ItemStack>> items = Collections.emptyList();
-        if (modifier instanceof ToolModifier) {
-            items = ((ToolModifier) modifier).getItems();
-        } else if (modifier instanceof ProjectileModifierTrait) {
-            items = ((ProjectileModifierTrait) modifier).getItems();
-        } else if (modifier instanceof ModifierTrait) {
-            items = ((ModifierTrait) modifier).getItems();
-        } else {
-            items = ConArmCompat.getModifierItems(modifier);
+        List<ItemStack> stacks = getModifierDisplayStacks(modifier);
+        if (stacks.isEmpty()) {
+            return new ItemStack(Items.BOOK);
         }
-        for (List<ItemStack> group : items) {
-            for (ItemStack stack : group) {
-                ItemStack resolved = resolveRenderableStack(stack);
-                if (!resolved.isEmpty()) {
-                    return resolved;
+        if (stacks.size() == 1) {
+            return stacks.get(0);
+        }
+        int index = (int) ((System.currentTimeMillis() / 1000L) % stacks.size());
+        return stacks.get(index);
+    }
+
+    private List<ItemStack> getModifierDisplayStacks(IModifier modifier) {
+        List<List<ItemStack>> items;
+        try {
+            if (modifier instanceof ToolModifier) {
+                items = ((ToolModifier) modifier).getItems();
+            } else if (modifier instanceof ProjectileModifierTrait) {
+                items = ((ProjectileModifierTrait) modifier).getItems();
+            } else if (modifier instanceof ModifierTrait) {
+                items = ((ModifierTrait) modifier).getItems();
+            } else {
+                items = ConArmCompat.getModifierItems(modifier);
+            }
+        } catch (RuntimeException e) {
+            return Collections.emptyList();
+        }
+        List<ItemStack> result = new ArrayList<>();
+        if (items != null) {
+            for (List<ItemStack> group : items) {
+                if (group == null) {
+                    continue;
+                }
+                for (ItemStack stack : group) {
+                    ItemStack resolved = resolveRenderableStack(stack);
+                    if (!resolved.isEmpty()) {
+                        result.add(resolved);
+                    }
                 }
             }
         }
-        return ItemStack.EMPTY;
+        return result;
+    }
+
+    private List<String> buildSpecialModifiersCache() {
+        List<String> result = new ArrayList<>();
+        if (blueprint == null) {
+            return result;
+        }
+        for (IModifier modifier : blueprint.target.getAvailableModifiers()) {
+            if (modifier != null && (isEmbossModifier(modifier) || isSecondEmbossModifier(modifier) || isMaterialSpecialModifier(modifier))) {
+                String identifier = modifier.getIdentifier();
+                if (identifier != null && !identifier.isEmpty() && !result.contains(identifier)) {
+                    result.add(identifier);
+                }
+            }
+        }
+        return result;
     }
 
     private ItemStack resolveRenderableStack(ItemStack stack) {

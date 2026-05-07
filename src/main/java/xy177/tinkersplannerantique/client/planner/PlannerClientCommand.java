@@ -1,6 +1,7 @@
 package xy177.tinkersplannerantique.client.planner;
 
 import java.io.IOException;
+import java.io.File;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -28,7 +29,7 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
 
     @Override
     public String getUsage(ICommandSender sender) {
-        return "/ticpa list output [name] | /ticpa list reset [name] | /ticpa list remake [name] | /ticpa test delet <true|false> | /ticpa test print <modpack|list>";
+        return "/ticpa list output [name] | /ticpa list reset [name] | /ticpa list remake [name] | /ticpa cache refresh | /ticpa test delet <true|false> | /ticpa test print <modpack|list|json>";
     }
 
     @Override
@@ -44,12 +45,15 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
     @Override
     public List<String> getTabCompletions(MinecraftServer server, ICommandSender sender, String[] args, BlockPos targetPos) {
         if (args.length == 1) {
-            return getListOfStringsMatchingLastWord(args, "list", "test");
+            return getListOfStringsMatchingLastWord(args, "list", "cache", "test");
         }
         if (args.length == 2) {
             String root = args[0].toLowerCase(Locale.ROOT);
             if ("list".equals(root)) {
                 return getListOfStringsMatchingLastWord(args, "output", "reset", "remake");
+            }
+            if ("cache".equals(root)) {
+                return getListOfStringsMatchingLastWord(args, "refresh");
             }
             if ("test".equals(root)) {
                 return getListOfStringsMatchingLastWord(args, "delet", "print");
@@ -59,7 +63,7 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
             return getListOfStringsMatchingLastWord(args, "true", "false");
         }
         if (args.length == 3 && "test".equalsIgnoreCase(args[0]) && "print".equalsIgnoreCase(args[1])) {
-            return getListOfStringsMatchingLastWord(args, "modpack", "list");
+            return getListOfStringsMatchingLastWord(args, "modpack", "list", "json");
         }
         return Collections.emptyList();
     }
@@ -81,6 +85,9 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
                 return;
             case "share":
                 handleShare(sender, args);
+                return;
+            case "cache":
+                handleCache(sender, args);
                 return;
             case "test":
                 handleTest(sender, args);
@@ -192,9 +199,17 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
         sender.sendMessage(new TextComponentString(I18n.translateToLocal("gui.tpa.code_shared")));
     }
 
+    private void handleCache(ICommandSender sender, String[] args) throws CommandException {
+        if (args.length != 2 || !"refresh".equalsIgnoreCase(args[1])) {
+            throw new WrongUsageException("/ticpa cache refresh");
+        }
+        PlannerScreen.refreshUiCache();
+        sender.sendMessage(new TextComponentString(I18n.translateToLocal("gui.tpa.cache_refreshed")));
+    }
+
     private void handleTest(ICommandSender sender, String[] args) throws CommandException {
         if (args.length != 3) {
-            throw new WrongUsageException("/ticpa test delet <true|false> | /ticpa test print <modpack|list>");
+            throw new WrongUsageException("/ticpa test delet <true|false> | /ticpa test print <modpack|list|json>");
         }
         if ("delet".equalsIgnoreCase(args[1])) {
             handleTestDelete(sender, args[2]);
@@ -204,7 +219,7 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
             handleTestPrint(sender, args[2]);
             return;
         }
-        throw new WrongUsageException("/ticpa test delet <true|false> | /ticpa test print <modpack|list>");
+        throw new WrongUsageException("/ticpa test delet <true|false> | /ticpa test print <modpack|list|json>");
     }
 
     private void handleTestDelete(ICommandSender sender, String value) throws CommandException {
@@ -221,6 +236,16 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
     }
 
     private void handleTestPrint(ICommandSender sender, String value) throws CommandException {
+        if ("json".equalsIgnoreCase(value)) {
+            try {
+                File file = PlannerRegistryJsonExporter.export(PlannerClientEvents.getDataFolder());
+                sender.sendMessage(new TextComponentString("Generated registry JSON: " + file.getAbsolutePath()));
+                return;
+            } catch (IOException e) {
+                throw localized(e);
+            }
+        }
+
         PlannerShortCodeList.Counts counts;
         String labelKey;
         if ("modpack".equalsIgnoreCase(value)) {
@@ -234,7 +259,7 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
             counts = list.countEntries();
             labelKey = "gui.tpa.print_list";
         } else {
-            throw new WrongUsageException("/ticpa test print <modpack|list>");
+            throw new WrongUsageException("/ticpa test print <modpack|list|json>");
         }
         sender.sendMessage(new TextComponentString(I18n.translateToLocalFormatted(
             "gui.tpa.print_counts",

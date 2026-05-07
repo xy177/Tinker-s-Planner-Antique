@@ -12,6 +12,7 @@ public final class PlannerConfig {
     public static String defaultShortBlueprintListName = "ticlist";
     public static boolean autoGenerateShortBlueprintList = true;
     public static boolean creativeOnlyGiveItem = true;
+    public static boolean enablePlannerUiCache = true;
 
     private PlannerConfig() {
     }
@@ -58,6 +59,13 @@ public final class PlannerConfig {
             true,
             "Allow the planner's give-item feature only in creative mode.\n"
                 + "将蓝图页面的“获取物品”功能限制在创造模式下使用。"
+        );
+        enablePlannerUiCache = configuration.getBoolean(
+            "enablePlannerUiCache",
+            Configuration.CATEGORY_GENERAL,
+            true,
+            "Enable planner UI emboss cache persistence. When disabled, existing cache entries can still be used, but new cache data is only written when the cache file does not exist, or when the cache is refreshed manually."
+                + "\n启用蓝图界面刻印缓存的持久化。关闭后，已存在的缓存仍可使用，但新的缓存数据只会在缓存文件不存在时，或在手动刷新缓存时写入。"
         );
         if (configuration.hasChanged()) {
             configuration.save();

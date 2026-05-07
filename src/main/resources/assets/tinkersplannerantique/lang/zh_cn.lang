@@ -50,6 +50,7 @@ gui.tpa.error.unknown_short_target=无法识别该简短蓝图的目标
 gui.tpa.error.missing_short_material=该简短蓝图引用了当前整合包缺失的材料
 gui.tpa.code_copied=蓝图码已复制到剪贴板
 gui.tpa.code_shared=蓝图码已共享到全服聊天
+gui.tpa.cache_refreshed=已刷新规划器界面缓存
 gui.tpa.bookmark_added=已将该蓝图加入收藏
 gui.tpa.bookmark_exists=该蓝图已在收藏中
 gui.tpa.listname_reset=已将列表验证名修改为: %s

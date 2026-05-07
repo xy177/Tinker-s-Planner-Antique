@@ -316,14 +316,14 @@ final class PlannerBlueprint {
         return null;
     }
 
-    private int getEffectiveModifierLevel(IModifier modifier, ModifierProgress progress) {
+    private static int getEffectiveModifierLevel(IModifier modifier, ModifierProgress progress) {
         if (modifier != null && "luck".equals(modifier.getIdentifier())) {
             return getLuckLevel(progress.current);
         }
         return progress.level;
     }
 
-    private int getLuckLevel(int current) {
+    private static int getLuckLevel(int current) {
         int level = 0;
         while (level < 3 && current >= 60 * (level + 1) * (level + 2) / 2) {
             level++;
@@ -487,16 +487,19 @@ final class PlannerBlueprint {
             blueprint.materials[i] = materialList.get(i);
         }
         blueprint.toolLevel = ToolLevelingCompat.readLevel(stack);
-        NBTTagList baseModifiers = TagUtil.getBaseModifiersTagList(stack);
-        for (int i = 0; i < baseModifiers.tagCount(); i++) {
-            String identifier = baseModifiers.getStringTagAt(i);
-            if (ToolLevelingCompat.isLevelingModifier(identifier)) {
+        NBTTagList modifierList = TagUtil.getModifiersTagList(stack);
+        for (int i = 0; i < modifierList.tagCount(); i++) {
+            NBTTagCompound modifierTag = modifierList.getCompoundTagAt(i);
+            String identifier = modifierTag.getString("identifier");
+            if (identifier.isEmpty() || ToolLevelingCompat.isLevelingModifier(identifier)) {
                 continue;
             }
             IModifier modifier = target.resolveModifier(identifier);
             if (modifier == null) {
                 continue;
             }
+            ModifierNBT.IntegerNBT data = ModifierNBT.readInteger(modifierTag);
+            int level = getEffectiveModifierLevel(modifier, new ModifierProgress(data.level, data.current, data.max, data.max > 0 || data.current > 0));
             if (isSecondEmbossModifier(target, modifier)) {
                 blueprint.secondEmbossModifierId = identifier;
                 blueprint.secondEmbossPartIndex = -1;
@@ -506,7 +509,11 @@ final class PlannerBlueprint {
             } else if (isMaterialModifier(target, modifier)) {
                 blueprint.materialModifierId = identifier;
             } else {
-                blueprint.modifiers.add(identifier);
+                while (blueprint.getModifierLevel(identifier) < level) {
+                    if (!blueprint.addModifier(modifier)) {
+                        break;
+                    }
+                }
             }
         }
         return blueprint;

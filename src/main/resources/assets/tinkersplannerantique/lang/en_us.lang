@@ -50,6 +50,7 @@ gui.tpa.error.unknown_short_target=Unknown short blueprint target
 gui.tpa.error.missing_short_material=The short blueprint references a material missing from the current modpack
 gui.tpa.code_copied=Blueprint code copied to clipboard
 gui.tpa.code_shared=Blueprint code shared to chat
+gui.tpa.cache_refreshed=Planner UI cache refreshed
 gui.tpa.bookmark_added=Blueprint added to bookmarks
 gui.tpa.bookmark_exists=Blueprint already bookmarked
 gui.tpa.listname_reset=List validation name changed to: %s

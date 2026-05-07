@@ -187,15 +187,20 @@ public final class PlannerClientEvents {
     @SubscribeEvent
     public static void onInitGui(GuiScreenEvent.InitGuiEvent.Post event) {
         GuiScreen gui = event.getGui();
-        if (gui instanceof GuiToolStation || isArmorStationGui(gui)) {
+        if (gui instanceof GuiToolStation) {
             openButton = createOpenButton(gui);
             event.getButtonList().add(openButton);
+        } else if (isArmorStationGui(gui)) {
+            openButton = createOpenButton(gui);
         }
     }
 
     @SubscribeEvent
     public static void onDrawScreenPost(GuiScreenEvent.DrawScreenEvent.Post event) {
         if (openButton != null && openButton.owner == event.getGui()) {
+            if (isArmorStationGui(event.getGui())) {
+                openButton.drawLateIcon(Minecraft.getMinecraft(), event.getMouseX(), event.getMouseY());
+            }
             openButton.drawTooltip(Minecraft.getMinecraft(), event.getMouseX(), event.getMouseY());
         }
         drawAssemblyNotice(event.getGui());
@@ -261,6 +266,10 @@ public final class PlannerClientEvents {
         return ConArmPresence.isLoaded() && ConArmClientCompat.isArmorStationGui(gui);
     }
 
+    private static boolean isArmorForgeGui(GuiScreen gui) {
+        return ConArmPresence.isLoaded() && ConArmClientCompat.isArmorForgeGui(gui);
+    }
+
     private static PlannerOpenButton createOpenButton(GuiScreen gui) {
         Slot output = findOutputSlot(gui);
         int x = guiLeft(gui) + 174 - 36;
@@ -321,16 +330,34 @@ public final class PlannerClientEvents {
             if (!visible) {
                 return;
             }
+            updateHovered(mouseX, mouseY);
+            drawIcon(mc);
+        }
+
+        private void drawLateIcon(Minecraft mc, int mouseX, int mouseY) {
+            if (!visible) {
+                return;
+            }
+            updateHovered(mouseX, mouseY);
+            drawIcon(mc);
+        }
+
+        private void updateHovered(int mouseX, int mouseY) {
             hovered = mouseX >= x && mouseY >= y && mouseX < x + width && mouseY < y + height;
+        }
+
+        private void drawIcon(Minecraft mc) {
             mc.getTextureManager().bindTexture(SIMULATE_BUILD_ICON);
             GlStateManager.pushMatrix();
             GlStateManager.disableLighting();
+            GlStateManager.disableDepth();
             GlStateManager.enableTexture2D();
             GlStateManager.enableBlend();
             GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
             GlStateManager.color(1F, 1F, 1F, hovered ? 1F : 0.8F);
             drawModalRectWithCustomSizedTexture(x + 2, y + 2, 0, 0, 16, 16, 16, 16);
             GlStateManager.color(1F, 1F, 1F, 1F);
+            GlStateManager.enableDepth();
             GlStateManager.popMatrix();
         }
 

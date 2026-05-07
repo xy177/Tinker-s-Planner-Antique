@@ -6,6 +6,13 @@ Tinkers Planner Antique is a helper mod for planning Tinkers' Construct tools an
 If you often compare materials, modifier slots, traits, and special stats from addon mods in large modpacks, this mod lets you handle most of that trial and error in one place.
 
 
+Version 1.0.2
+-------------
+
+- Added `/ticpa test print json` to export the current environment's tool, material, trait, modifier, and part registry names into a JSON file with both English and Chinese localized names.
+- The JSON export excludes special emboss entries, second emboss entries, and material-special entries.
+
+
 Feature Overview
 ----------------
 
@@ -46,9 +53,14 @@ Common commands:
 - `/ticpa test print list`
   Prints the tool+armor count, material count, and modifier count recorded in the current short code list.
 
-- `/ticpa test delet <true|false>`
-  Toggles debug delete mode for modifier entries. When enabled, deleted modifiers can be marked and hidden in the planner for testing.
+- `/ticpa test print json`
+  Exports the current environment's tool, material, trait, modifier, and part registry names as a JSON file with English and Chinese localized names.
 
+- `/ticpa test delet <true|false>`
+  Toggles debug delete mode for modifier entries. When enabled, deleted modifiers can be marked and hidden in the planner for testing. The command name is kept as `delet` for compatibility with existing 1.0.1 builds.
+
+- `/ticpa cache refresh`
+  Rebuilds the planner UI cache manually.
 
 Config
 ------
@@ -61,33 +73,42 @@ Config
 
 `creativeOnlyGiveItem` controls whether the "give item" feature is limited to creative mode.
 
+`enablePlannerUiCache` controls whether planner UI cache data is written automatically. When disabled, the mod will only create cache data automatically if the cache file does not already exist, and later updates must be triggered manually with `/ticpa cache refresh`.
+
 
 ---
 
 匠魂蓝图怀古/意研订斟
 =======================
 
-匠魂蓝图怀古/意研订斟 是一个用于规划匠魂工具和匠魂护甲的辅助模组。它提供了一个独立的蓝图界面，让你可以在真正制作前先搭配工具、部件材料、强化和刻印，并直接查看预览结果。
+匠魂蓝图怀古/意研订斟 是一个用于设计匠魂工具和匠魂护甲蓝图的辅助模组。它提供了一个独立的蓝图界面，让你可以在真正制作前先搭配工具、护甲、部件、材料、强化和刻印，并直接查看预览结果。
 
-如果你经常在大型整合包里反复比较材料、强化槽、trait 和各种扩展模组带来的特殊属性，这个模组可以让这些试错过程集中在一个界面里完成。
+如果你经常在大型整合包里反复比较材料、强化槽、特性和各种附属模组带来的特殊属性，这个模组可以让这些试错过程集中在一个界面里完成。
+
+
+1.0.2 更新日志
+--------------
+
+- 新增 `/ticpa test print json`，可将当前环境中的工具、材料、特性、强化和部件注册名导出为 JSON 文件，并附带英文和中文本地化名称。
+- 导出的内容会自动排除特殊刻印、刻印2以及材料特殊项。
 
 
 功能概览
 --------
 
-你可以在规划界面中选择工具或护甲类型，然后逐个选择部件材料。界面会实时生成预览物品，并尽量按照真实匠魂构筑流程计算最终属性。
+你可以在蓝图界面中选择工具或护甲类型，然后逐个选择部件材料。界面会实时生成预览物品，并尽量按照真实匠魂构筑流程计算最终属性。
 
-材料列表支持排序。常见属性如攻击力、挖掘速度、耐久、护甲值、护甲韧性等会显示为排序按钮；部分扩展模组添加的特殊部件属性也会自动识别并加入排序项。
+材料列表支持排序。常见属性如攻击力、挖掘速度、耐久、护甲值、护甲韧性等会显示为排序按钮；部分附属模组添加的特殊部件属性也会自动识别并加入排序项。
 
 强化列表可以直接添加或移除强化，方便你在制作前确认最终结果。
 
-部件材料选择时，左下角会显示 trait 筛选列表。未选中具体材料时，它会显示当前部件可用材料拥有的 trait；选中某个材料后，则只显示这个材料在当前部件上的 trait。点击 trait 可以筛选出拥有该 trait 的材料。
+部件材料选择时，左下角会显示特性筛选列表。未选中具体材料时，它会显示当前部件可用材料拥有的特性；选中某个材料后，则只显示这个材料在当前部件上的特性。点击特性可以筛选出拥有该特性的材料。
 
-规划好的蓝图可以导出为蓝图码，也可以从蓝图码导入。聊天中的蓝图码消息带有复制、收藏和共享功能，方便在多人游戏或整合包测试时传递方案。
+设计好的蓝图可以导出为蓝图码，也可以从蓝图码导入。聊天中的蓝图码消息带有复制、收藏和分享功能，方便在多人游戏或整合包测试时传递方案。
 
 蓝图可以加入收藏。工具收藏和护甲收藏分开保存，便于之后快速找回常用方案。
 
-在允许的情况下，规划结果可以直接获取为物品。默认配置下，这个功能只允许创造模式使用。
+在允许的情况下，蓝图预览结果可以直接获取为物品。默认配置下，这个功能只允许创造模式使用。
 
 
 短码列表
@@ -112,9 +133,14 @@ Config
 - `/ticpa test print list`
   输出当前短码列表中记录的工具+护甲数量、材料数量和强化数量。
 
-- `/ticpa test delet <true|false>`
-  切换调试用的删除模式。开启后，可以在规划器中标记并隐藏已删除的强化条目，方便测试。（我知道应该是delete，但是当时少打了个e，然后1.0.1上传后我才发现...）
+- `/ticpa test print json`
+  将当前环境中的工具、材料、特性、强化和部件注册名导出为 JSON 文件，并附带英文和中文本地化名称。
 
+- `/ticpa test delet <true|false>`
+  切换调试用的删除模式。开启后，可以在蓝图界面中标记并隐藏已删除的强化条目，方便测试。命令名保留为 `delet` 是为了兼容已经发布的 1.0.1 版本。
+
+- `/ticpa cache refresh`
+  手动重建蓝图界面缓存。
 
 配置
 ----
@@ -125,4 +151,6 @@ Config
 
 `autoGenerateWhenMissing` 控制缺少短码列表时是否自动生成。
 
-`creativeOnlyGiveItem` 控制“获取物品”是否仅限创造模式使用。
+`creativeOnlyGiveItem` 控制“获取物品”功能是否仅限创造模式使用。
+
+`enablePlannerUiCache` 控制蓝图界面缓存是否自动写入。关闭后，如果缓存文件不存在，模组仍会自动生成一次缓存；后续更新需要手动执行 `/ticpa cache refresh`。
