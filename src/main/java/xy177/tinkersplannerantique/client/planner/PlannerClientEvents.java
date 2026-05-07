@@ -9,12 +9,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import c4.conarm.client.gui.GuiArmorStation;
-import c4.conarm.lib.ArmoryRegistry;
-import c4.conarm.lib.ArmoryRegistryClient;
-import c4.conarm.lib.armor.ArmorCore;
-import c4.conarm.lib.client.ArmorBuildGuiInfo;
-import c4.conarm.common.inventory.SlotArmorStationOut;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiButton;
@@ -48,7 +42,7 @@ public final class PlannerClientEvents {
 
     private static PlannerData data;
     private static List<ToolPlannerTarget> toolTargets;
-    private static List<ArmorPlannerTarget> armorTargets;
+    private static List<ConArmClientCompat.ArmorPlannerTarget> armorTargets;
     private static PlannerOpenButton openButton;
     private static String assemblyNotice;
     private static long assemblyNoticeUntil;
@@ -88,15 +82,12 @@ public final class PlannerClientEvents {
         return toolTargets;
     }
 
-    static List<ArmorPlannerTarget> getArmorTargets() {
+    static List<ConArmClientCompat.ArmorPlannerTarget> getArmorTargets() {
+        if (!ConArmPresence.isLoaded()) {
+            return Collections.emptyList();
+        }
         if (armorTargets == null) {
-            armorTargets = new ArrayList<>();
-            for (ArmorCore armor : ArmoryRegistry.getArmorCrafting()) {
-                ArmorBuildGuiInfo info = ArmoryRegistryClient.getArmorBuildInfoForArmor(armor);
-                if (info != null) {
-                    armorTargets.add(new ArmorPlannerTarget(armor, info));
-                }
-            }
+            armorTargets = new ArrayList<>(ConArmClientCompat.getArmorTargets());
         }
         return armorTargets;
     }
@@ -104,7 +95,9 @@ public final class PlannerClientEvents {
     static List<PlannerTarget> getAllTargets() {
         List<PlannerTarget> all = new ArrayList<>();
         all.addAll(getToolTargets());
-        all.addAll(getArmorTargets());
+        if (ConArmPresence.isLoaded()) {
+            all.addAll(getArmorTargets());
+        }
         return all;
     }
 
@@ -129,7 +122,7 @@ public final class PlannerClientEvents {
     private static void applyAssemblyNoticeToCurrentStation(List<String> details) {
         Minecraft mc = Minecraft.getMinecraft();
         GuiScreen screen = mc.currentScreen;
-        if (!(screen instanceof GuiToolStation) && !(screen instanceof GuiArmorStation)) {
+        if (!(screen instanceof GuiToolStation) && !isArmorStationGui(screen)) {
             return;
         }
         List<String> lines = new ArrayList<>();
@@ -150,8 +143,8 @@ public final class PlannerClientEvents {
         if (!setStationInfoPanel(screen, details.isEmpty() ? "gui.tpa.assemble_caption" : "gui.warning", lines)) {
             if (screen instanceof GuiToolStation) {
                 ((GuiToolStation) screen).warning(lines.get(0));
-            } else if (screen instanceof GuiArmorStation) {
-                ((GuiArmorStation) screen).warning(lines.get(0));
+            } else {
+                ConArmClientCompat.warn(screen, lines.get(0));
             }
         }
     }
@@ -194,7 +187,7 @@ public final class PlannerClientEvents {
     @SubscribeEvent
     public static void onInitGui(GuiScreenEvent.InitGuiEvent.Post event) {
         GuiScreen gui = event.getGui();
-        if (gui instanceof GuiToolStation || gui instanceof GuiArmorStation) {
+        if (gui instanceof GuiToolStation || isArmorStationGui(gui)) {
             openButton = createOpenButton(gui);
             event.getButtonList().add(openButton);
         }
@@ -213,7 +206,7 @@ public final class PlannerClientEvents {
             assemblyNotice = null;
             return;
         }
-        if (!(gui instanceof GuiToolStation) && !(gui instanceof GuiArmorStation)) {
+        if (!(gui instanceof GuiToolStation) && !isArmorStationGui(gui)) {
             return;
         }
         Minecraft mc = Minecraft.getMinecraft();
@@ -259,9 +252,13 @@ public final class PlannerClientEvents {
     private static void openPlanner(GuiScreen gui) {
         if (gui instanceof GuiToolStation) {
             Minecraft.getMinecraft().displayGuiScreen(PlannerScreen.forTools((GuiToolStation) gui));
-        } else if (gui instanceof GuiArmorStation) {
-            Minecraft.getMinecraft().displayGuiScreen(PlannerScreen.forArmor((GuiArmorStation) gui));
+        } else if (isArmorStationGui(gui)) {
+            ConArmClientCompat.openArmorPlanner(gui);
         }
+    }
+
+    private static boolean isArmorStationGui(GuiScreen gui) {
+        return ConArmPresence.isLoaded() && ConArmClientCompat.isArmorStationGui(gui);
     }
 
     private static PlannerOpenButton createOpenButton(GuiScreen gui) {
@@ -280,7 +277,7 @@ public final class PlannerClientEvents {
             return null;
         }
         for (Slot slot : ((GuiContainer) gui).inventorySlots.inventorySlots) {
-            if (slot instanceof SlotToolStationOut || slot instanceof SlotArmorStationOut) {
+            if (slot instanceof SlotToolStationOut || (ConArmPresence.isLoaded() && ConArmClientCompat.isArmorOutputSlot(slot))) {
                 return slot;
             }
         }

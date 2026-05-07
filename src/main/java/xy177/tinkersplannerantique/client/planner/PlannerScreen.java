@@ -16,11 +16,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
-import c4.conarm.client.gui.GuiArmorStation;
-import c4.conarm.common.ConstructsRegistry;
-import c4.conarm.lib.modifiers.ArmorModifier;
-import c4.conarm.lib.modifiers.ArmorModifierTrait;
-import c4.conarm.lib.materials.ArmorMaterialType;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
@@ -98,6 +93,9 @@ public class PlannerScreen extends GuiScreen {
     private static final String YOYO_BODY = "body";
     private static final String YOYO_CORD = "cord";
     private static final String YOYO_AXLE = "axle";
+    private static final String ARMOR_CORE = ConArmCompat.CORE;
+    private static final String ARMOR_PLATES = ConArmCompat.PLATES;
+    private static final String ARMOR_TRIM = ConArmCompat.TRIM;
     private static final Set<String> BUILT_IN_SORT_STAT_TYPES = new LinkedHashSet<>();
 
     static {
@@ -110,9 +108,9 @@ public class PlannerScreen extends GuiScreen {
             MaterialTypes.SHAFT,
             MaterialTypes.FLETCHING,
             MaterialTypes.PROJECTILE,
-            ArmorMaterialType.CORE,
-            ArmorMaterialType.PLATES,
-            ArmorMaterialType.TRIM,
+            ARMOR_CORE,
+            ARMOR_PLATES,
+            ARMOR_TRIM,
             YOYO_BODY,
             YOYO_CORD,
             YOYO_AXLE
@@ -203,7 +201,7 @@ public class PlannerScreen extends GuiScreen {
     private List<String> deferredTooltipLines;
     private String selectedTraitFilterId;
 
-    private PlannerScreen(GuiScreen parent, PlannerTarget.TargetType type, List<? extends PlannerTarget> targets) {
+    PlannerScreen(GuiScreen parent, PlannerTarget.TargetType type, List<? extends PlannerTarget> targets) {
         this.parent = parent;
         this.type = type;
         this.targets = targets;
@@ -218,12 +216,6 @@ public class PlannerScreen extends GuiScreen {
 
     public static PlannerScreen forTools(GuiToolStation parent) {
         PlannerScreen screen = new PlannerScreen(parent, PlannerTarget.TargetType.TOOL, PlannerClientEvents.getToolTargets());
-        screen.importFromParent();
-        return screen;
-    }
-
-    public static PlannerScreen forArmor(GuiArmorStation parent) {
-        PlannerScreen screen = new PlannerScreen(parent, PlannerTarget.TargetType.ARMOR, PlannerClientEvents.getArmorTargets());
         screen.importFromParent();
         return screen;
     }
@@ -244,11 +236,13 @@ public class PlannerScreen extends GuiScreen {
         leftPanelLeft = centerLeft - LEFT_W - GAP;
         rightPanelLeft = centerLeft + CENTER_W;
 
-        int tabX = leftPanelLeft + (LEFT_W - TAB_W * 2 - TAB_GAP) / 2;
-        GuiButton toolsTab = addButton(new TabButton(BTN_TOOLS, tabX, centerTop - 22, I18n.translateToLocal("gui.tpa.tools")));
-        GuiButton armorTab = addButton(new TabButton(BTN_ARMOR, tabX + TAB_W + TAB_GAP, centerTop - 22, I18n.translateToLocal("gui.tpa.armor")));
-        toolsTab.enabled = type != PlannerTarget.TargetType.TOOL;
-        armorTab.enabled = type != PlannerTarget.TargetType.ARMOR;
+        if (ConArmPresence.isLoaded()) {
+            int tabX = leftPanelLeft + (LEFT_W - TAB_W * 2 - TAB_GAP) / 2;
+            GuiButton toolsTab = addButton(new TabButton(BTN_TOOLS, tabX, centerTop - 22, I18n.translateToLocal("gui.tpa.tools")));
+            toolsTab.enabled = type != PlannerTarget.TargetType.TOOL;
+            GuiButton armorTab = addButton(new TabButton(BTN_ARMOR, tabX + TAB_W + TAB_GAP, centerTop - 22, I18n.translateToLocal("gui.tpa.armor")));
+            armorTab.enabled = type != PlannerTarget.TargetType.ARMOR;
+        }
 
         rebuildToolButtons();
         rebuildPartButtons();
@@ -495,10 +489,16 @@ public class PlannerScreen extends GuiScreen {
     protected void actionPerformed(GuiButton button) throws IOException {
         switch (button.id) {
             case BTN_TOOLS:
+                if (!ConArmPresence.isLoaded()) {
+                    return;
+                }
                 saveBookmarks();
                 mc.displayGuiScreen(new PlannerScreen(parent, PlannerTarget.TargetType.TOOL, PlannerClientEvents.getToolTargets()));
                 return;
             case BTN_ARMOR:
+                if (!ConArmPresence.isLoaded()) {
+                    return;
+                }
                 saveBookmarks();
                 mc.displayGuiScreen(new PlannerScreen(parent, PlannerTarget.TargetType.ARMOR, PlannerClientEvents.getArmorTargets()));
                 return;
@@ -1150,7 +1150,7 @@ public class PlannerScreen extends GuiScreen {
     }
 
     private boolean canUseAssemble() {
-        return blueprint != null && blueprint.isComplete() && (parent instanceof GuiToolStation || parent instanceof GuiArmorStation);
+        return blueprint != null && blueprint.isComplete() && (parent instanceof GuiToolStation || isArmorStationParent());
     }
 
     private void assembleCurrentItem() {
@@ -1233,12 +1233,12 @@ public class PlannerScreen extends GuiScreen {
         return base;
     }
 
-    private void importFromParent() {
+    void importFromParent() {
         ItemStack stack = ItemStack.EMPTY;
         if (parent instanceof GuiToolStation) {
             stack = ((GuiToolStation) parent).inventorySlots.getSlot(0).getStack();
-        } else if (parent instanceof GuiArmorStation) {
-            stack = ((GuiArmorStation) parent).inventorySlots.getSlot(0).getStack();
+        } else if (isArmorStationParent()) {
+            stack = ConArmClientCompat.getParentStack(parent);
         }
         if (stack.isEmpty()) {
             return;
@@ -1255,6 +1255,10 @@ public class PlannerScreen extends GuiScreen {
         }
     }
 
+    private boolean isArmorStationParent() {
+        return ConArmPresence.isLoaded() && ConArmClientCompat.isArmorStationGui(parent);
+    }
+
     private List<int[]> getPartPositions(PlannerTarget target) {
         List<int[]> positions = new ArrayList<>();
         if (target instanceof ToolPlannerTarget) {
@@ -1269,10 +1273,8 @@ public class PlannerScreen extends GuiScreen {
                 positions.add(new int[] { core[0] + 9, core[1] });
                 positions.add(fletching);
             }
-        } else if (target instanceof ArmorPlannerTarget) {
-            for (org.lwjgl.util.Point point : ((ArmorPlannerTarget) target).getGuiInfo().positions) {
-                positions.add(new int[] { point.getX(), point.getY() });
-            }
+        } else if (target.getType() == PlannerTarget.TargetType.ARMOR) {
+            positions.addAll(ConArmClientCompat.getPartPositions(target));
         }
         return positions;
     }
@@ -1585,10 +1587,8 @@ public class PlannerScreen extends GuiScreen {
             items = ((ToolModifier) modifier).getItems();
         } else if (modifier instanceof ModifierTrait) {
             items = ((ModifierTrait) modifier).getItems();
-        } else if (modifier instanceof ArmorModifier) {
-            items = ((ArmorModifier) modifier).getItems();
-        } else if (modifier instanceof ArmorModifierTrait) {
-            items = ((ArmorModifierTrait) modifier).getItems();
+        } else {
+            items = ConArmCompat.getModifierItems(modifier);
         }
         if (!items.isEmpty() && !items.get(0).isEmpty()) {
             return items.get(0).get(0);
@@ -1664,9 +1664,11 @@ public class PlannerScreen extends GuiScreen {
             addUsedStatType(statTypes, partType, YOYO_CORD);
             addUsedStatType(statTypes, partType, YOYO_AXLE);
         }
-        addUsedStatType(statTypes, partType, ArmorMaterialType.CORE);
-        addUsedStatType(statTypes, partType, ArmorMaterialType.PLATES);
-        addUsedStatType(statTypes, partType, ArmorMaterialType.TRIM);
+        if (ConArmPresence.isLoaded()) {
+            addUsedStatType(statTypes, partType, ARMOR_CORE);
+            addUsedStatType(statTypes, partType, ARMOR_PLATES);
+            addUsedStatType(statTypes, partType, ARMOR_TRIM);
+        }
         return statTypes;
     }
 
@@ -1681,7 +1683,7 @@ public class PlannerScreen extends GuiScreen {
             return ItemStack.EMPTY;
         }
         if (type == PlannerTarget.TargetType.ARMOR) {
-            return ConstructsRegistry.polishingKit != null ? ConstructsRegistry.polishingKit.getItemstackWithMaterial(material) : ItemStack.EMPTY;
+            return ConArmCompat.getPolishingKitStack(material);
         }
         return TinkerTools.sharpeningKit != null ? TinkerTools.sharpeningKit.getItemstackWithMaterial(material) : ItemStack.EMPTY;
     }
@@ -1691,7 +1693,7 @@ public class PlannerScreen extends GuiScreen {
             return false;
         }
         if (type == PlannerTarget.TargetType.ARMOR) {
-            if (ConstructsRegistry.polishingKit == null || !ConstructsRegistry.polishingKit.canUseMaterial(material) || !material.hasStats(ArmorMaterialType.PLATES)) {
+            if (!ConArmCompat.canUsePolishingMaterial(material)) {
                 return false;
             }
         } else {
@@ -1793,14 +1795,14 @@ public class PlannerScreen extends GuiScreen {
         if (part.hasUseForStat(MaterialTypes.PROJECTILE)) {
             return MaterialTypes.PROJECTILE;
         }
-        if (part.hasUseForStat(ArmorMaterialType.CORE)) {
-            return ArmorMaterialType.CORE;
+        if (ConArmPresence.isLoaded() && part.hasUseForStat(ARMOR_CORE)) {
+            return ARMOR_CORE;
         }
-        if (part.hasUseForStat(ArmorMaterialType.PLATES)) {
-            return ArmorMaterialType.PLATES;
+        if (ConArmPresence.isLoaded() && part.hasUseForStat(ARMOR_PLATES)) {
+            return ARMOR_PLATES;
         }
-        if (part.hasUseForStat(ArmorMaterialType.TRIM)) {
-            return ArmorMaterialType.TRIM;
+        if (ConArmPresence.isLoaded() && part.hasUseForStat(ARMOR_TRIM)) {
+            return ARMOR_TRIM;
         }
         return MaterialTypes.HEAD;
     }
@@ -1817,14 +1819,14 @@ public class PlannerScreen extends GuiScreen {
                 return YOYO_AXLE;
             }
         }
-        if (partType.usesStat(ArmorMaterialType.CORE)) {
-            return ArmorMaterialType.CORE;
+        if (ConArmPresence.isLoaded() && partType.usesStat(ARMOR_CORE)) {
+            return ARMOR_CORE;
         }
-        if (partType.usesStat(ArmorMaterialType.PLATES)) {
-            return ArmorMaterialType.PLATES;
+        if (ConArmPresence.isLoaded() && partType.usesStat(ARMOR_PLATES)) {
+            return ARMOR_PLATES;
         }
-        if (partType.usesStat(ArmorMaterialType.TRIM)) {
-            return ArmorMaterialType.TRIM;
+        if (ConArmPresence.isLoaded() && partType.usesStat(ARMOR_TRIM)) {
+            return ARMOR_TRIM;
         }
         if (partType.usesStat(MaterialTypes.HANDLE)) {
             return MaterialTypes.HANDLE;
@@ -1869,13 +1871,13 @@ public class PlannerScreen extends GuiScreen {
         } else if (isYoyosLoaded() && selectedPartType.usesStat(YOYO_AXLE)) {
             sorts.add(MaterialSortEntry.YOYO_FRICTION);
             sorts.add(MaterialSortEntry.YOYO_AXLE_MODIFIER);
-        } else if (selectedPartType.usesStat(ArmorMaterialType.CORE)) {
+        } else if (ConArmPresence.isLoaded() && selectedPartType.usesStat(ARMOR_CORE)) {
             sorts.add(MaterialSortEntry.ARMOR_DEFENSE);
             sorts.add(MaterialSortEntry.ARMOR_DURABILITY);
-        } else if (selectedPartType.usesStat(ArmorMaterialType.PLATES)) {
+        } else if (ConArmPresence.isLoaded() && selectedPartType.usesStat(ARMOR_PLATES)) {
             sorts.add(MaterialSortEntry.ARMOR_TOUGHNESS);
             sorts.add(MaterialSortEntry.ARMOR_DURABILITY);
-        } else if (selectedPartType.usesStat(ArmorMaterialType.TRIM)) {
+        } else if (ConArmPresence.isLoaded() && selectedPartType.usesStat(ARMOR_TRIM)) {
             sorts.add(MaterialSortEntry.ARMOR_DURABILITY);
         } else if (type == PlannerTarget.TargetType.TOOL && selectedPartType.usesStat(MaterialTypes.HEAD)) {
             sorts.add(MaterialSortEntry.HEAD_ATTACK);
@@ -2418,10 +2420,10 @@ public class PlannerScreen extends GuiScreen {
                 Material material = getModifierMaterial(modifier);
                 return material != null ? TinkerTools.sharpeningKit.getItemstackWithMaterial(material) : new ItemStack(TinkerTools.sharpeningKit);
             }
-            if (specialType == SpecialModifierType.POLISHED && ConstructsRegistry.polishingKit != null) {
+            if (specialType == SpecialModifierType.POLISHED) {
                 IModifier modifier = blueprint == null ? null : blueprint.target.resolveModifier(blueprint.materialModifierId);
                 Material material = getModifierMaterial(modifier);
-                return material != null ? ConstructsRegistry.polishingKit.getItemstackWithMaterial(material) : new ItemStack(ConstructsRegistry.polishingKit);
+                return ConArmCompat.getPolishingKitStack(material);
             }
             return ItemStack.EMPTY;
         }
@@ -2573,10 +2575,8 @@ public class PlannerScreen extends GuiScreen {
             items = ((ProjectileModifierTrait) modifier).getItems();
         } else if (modifier instanceof ModifierTrait) {
             items = ((ModifierTrait) modifier).getItems();
-        } else if (modifier instanceof ArmorModifier) {
-            items = ((ArmorModifier) modifier).getItems();
-        } else if (modifier instanceof ArmorModifierTrait) {
-            items = ((ArmorModifierTrait) modifier).getItems();
+        } else {
+            items = ConArmCompat.getModifierItems(modifier);
         }
         for (List<ItemStack> group : items) {
             for (ItemStack stack : group) {
@@ -2793,13 +2793,13 @@ public class PlannerScreen extends GuiScreen {
             if (YOYO_AXLE.equals(statType)) {
                 return YOYO_AXLE_MODIFIER;
             }
-            if (ArmorMaterialType.CORE.equals(statType)) {
+            if (ARMOR_CORE.equals(statType)) {
                 return ARMOR_DEFENSE;
             }
-            if (ArmorMaterialType.PLATES.equals(statType)) {
+            if (ARMOR_PLATES.equals(statType)) {
                 return ARMOR_TOUGHNESS;
             }
-            if (ArmorMaterialType.TRIM.equals(statType)) {
+            if (ARMOR_TRIM.equals(statType)) {
                 return ARMOR_DURABILITY;
             }
             if (MaterialTypes.HEAD.equals(statType)) {

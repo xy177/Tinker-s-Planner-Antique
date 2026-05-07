@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import c4.conarm.lib.materials.ArmorMaterialType;
 import net.minecraft.nbt.CompressedStreamTools;
 import net.minecraft.nbt.NBTTagCompound;
 import slimeknights.tconstruct.library.materials.Material;
@@ -354,9 +353,11 @@ final class PlannerBlueprintCodecs {
         addUsedStatType(statTypes, partType, MaterialTypes.SHAFT);
         addUsedStatType(statTypes, partType, MaterialTypes.FLETCHING);
         addUsedStatType(statTypes, partType, MaterialTypes.PROJECTILE);
-        addUsedStatType(statTypes, partType, ArmorMaterialType.CORE);
-        addUsedStatType(statTypes, partType, ArmorMaterialType.PLATES);
-        addUsedStatType(statTypes, partType, ArmorMaterialType.TRIM);
+        if (ConArmPresence.isLoaded()) {
+            addUsedStatType(statTypes, partType, ConArmCompat.CORE);
+            addUsedStatType(statTypes, partType, ConArmCompat.PLATES);
+            addUsedStatType(statTypes, partType, ConArmCompat.TRIM);
+        }
         return statTypes;
     }
 

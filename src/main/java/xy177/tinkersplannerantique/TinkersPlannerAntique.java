@@ -23,7 +23,7 @@ public class TinkersPlannerAntique {
     public static final String VERSION = "1.0.0";
     public static final String ACCEPTED_MC_VERSIONS = "[1.12,1.13)";
     public static final String DEPENDENCIES =
-        "required-after:forge@[14.23.5.2864,);required-after:tconstruct@[1.12.2-2.13.0.183,);required-after:conarm@[1.2.5.9,)";
+        "required-after:forge@[14.23.5.2864,);required-after:tconstruct@[1.12.2-2.13.0.183,);after:conarm";
 
     @Mod.Instance(MODID)
     public static TinkersPlannerAntique instance;

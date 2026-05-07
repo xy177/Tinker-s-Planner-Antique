@@ -3,10 +3,6 @@ package xy177.tinkersplannerantique.client.planner;
 import java.util.ArrayList;
 import java.util.List;
 
-import c4.conarm.common.inventory.ContainerArmorStation;
-import c4.conarm.common.inventory.SlotArmorStationIn;
-import c4.conarm.common.inventory.SlotArmorStationOut;
-import c4.conarm.lib.armor.ArmorCore;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.inventory.Container;
 import net.minecraft.inventory.Slot;
@@ -24,7 +20,6 @@ import slimeknights.tconstruct.library.tinkering.TinkersItem;
 import slimeknights.tconstruct.tools.common.inventory.ContainerToolStation;
 import slimeknights.tconstruct.tools.common.inventory.SlotToolStationIn;
 import slimeknights.tconstruct.tools.common.inventory.SlotToolStationOut;
-import c4.conarm.lib.tinkering.TinkersArmor;
 import xy177.tinkersplannerantique.PlannerConfig;
 
 public final class PlannerNetwork {
@@ -92,7 +87,7 @@ public final class PlannerNetwork {
         }
 
         private boolean isPlannerItem(ItemStack stack) {
-            return stack.getItem() instanceof TinkersItem || stack.getItem() instanceof TinkersArmor;
+            return stack.getItem() instanceof TinkersItem || ConArmCompat.isPlannerArmor(stack);
         }
     }
 
@@ -174,11 +169,7 @@ public final class PlannerNetwork {
 
         private boolean selectTarget(Container container, ItemStack target, int activeSlots, boolean armor) {
             if (armor) {
-                if (!(container instanceof ContainerArmorStation) || !(target.getItem() instanceof ArmorCore)) {
-                    return false;
-                }
-                ((ContainerArmorStation) container).setArmorSelection((ArmorCore) target.getItem(), activeSlots);
-                return true;
+                return ConArmCompat.selectArmorTarget(container, target, activeSlots);
             }
             if (!(container instanceof ContainerToolStation) || !(target.getItem() instanceof ToolCore)) {
                 return false;
@@ -193,7 +184,7 @@ public final class PlannerNetwork {
                 return slots;
             }
             for (Slot slot : container.inventorySlots) {
-                if (armor ? slot instanceof SlotArmorStationIn : slot instanceof SlotToolStationIn) {
+                if (armor ? ConArmCompat.isArmorInputSlot(slot) : slot instanceof SlotToolStationIn) {
                     slots.add(slot);
                 }
             }
@@ -202,7 +193,7 @@ public final class PlannerNetwork {
 
         private Slot findPlayerSlot(Container container, EntityPlayerMP player, ItemStack expected) {
             for (Slot slot : container.inventorySlots) {
-                if (slot instanceof SlotToolStationIn || slot instanceof SlotToolStationOut || slot instanceof SlotArmorStationIn || slot instanceof SlotArmorStationOut) {
+                if (slot instanceof SlotToolStationIn || slot instanceof SlotToolStationOut || ConArmCompat.isArmorStationSlot(slot)) {
                     continue;
                 }
                 if (slot.inventory == player.inventory && matches(slot.getStack(), expected)) {

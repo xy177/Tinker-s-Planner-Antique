@@ -8,8 +8,6 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
-import c4.conarm.lib.tinkering.ArmorBuilder;
-import c4.conarm.lib.tinkering.TinkersArmor;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
@@ -439,8 +437,8 @@ final class PlannerBlueprint {
         }
         NBTTagCompound root = TagUtil.getTagSafe(stack);
         try {
-            if (stack.getItem() instanceof TinkersArmor) {
-                ArmorBuilder.rebuildArmor(root, (TinkersArmor) stack.getItem());
+            if (ConArmPresence.isLoaded() && ConArmCompat.rebuildArmor(stack, root)) {
+                return;
             } else if (stack.getItem() instanceof TinkersItem) {
                 ToolBuilder.rebuildTool(root, (TinkersItem) stack.getItem());
             }

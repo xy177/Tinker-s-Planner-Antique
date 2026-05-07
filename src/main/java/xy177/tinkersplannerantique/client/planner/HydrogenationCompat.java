@@ -11,7 +11,6 @@ import slimeknights.tconstruct.library.materials.MaterialTypes;
 import slimeknights.tconstruct.library.tinkering.PartMaterialType;
 import slimeknights.tconstruct.library.utils.TagUtil;
 import slimeknights.tconstruct.library.utils.TinkerUtil;
-import c4.conarm.lib.materials.ArmorMaterialType;
 
 final class HydrogenationCompat {
 
@@ -68,9 +67,11 @@ final class HydrogenationCompat {
         addUsed(statTypes, partType, MaterialTypes.SHAFT);
         addUsed(statTypes, partType, MaterialTypes.FLETCHING);
         addUsed(statTypes, partType, MaterialTypes.PROJECTILE);
-        addUsed(statTypes, partType, ArmorMaterialType.CORE);
-        addUsed(statTypes, partType, ArmorMaterialType.PLATES);
-        addUsed(statTypes, partType, ArmorMaterialType.TRIM);
+        if (ConArmPresence.isLoaded()) {
+            addUsed(statTypes, partType, ConArmCompat.CORE);
+            addUsed(statTypes, partType, ConArmCompat.PLATES);
+            addUsed(statTypes, partType, ConArmCompat.TRIM);
+        }
         return statTypes;
     }
 

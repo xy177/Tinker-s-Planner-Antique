@@ -2,7 +2,6 @@ package xy177.tinkersplannerantique.client.planner;
 
 import java.lang.reflect.Method;
 
-import c4.conarm.lib.tinkering.TinkersArmor;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
@@ -118,7 +117,7 @@ final class ToolLevelingCompat {
     }
 
     private static boolean isArmor(ItemStack stack) {
-        return stack.getItem() instanceof TinkersArmor;
+        return ConArmPresence.isLoaded() && ConArmCompat.isArmorItem(stack);
     }
 
     private static boolean containsString(NBTTagList list, String identifier) {
