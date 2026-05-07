@@ -46,6 +46,9 @@ Common commands:
 - `/ticpa test print list`
   Prints the tool+armor count, material count, and modifier count recorded in the current short code list.
 
+- `/ticpa test delet <true|false>`
+  Toggles debug delete mode for modifier entries. When enabled, deleted modifiers can be marked and hidden in the planner for testing.
+
 
 Config
 ------
@@ -108,6 +111,9 @@ Config
 
 - `/ticpa test print list`
   输出当前短码列表中记录的工具+护甲数量、材料数量和强化数量。
+
+- `/ticpa test delet <true|false>`
+  切换调试用的删除模式。开启后，可以在规划器中标记并隐藏已删除的强化条目，方便测试。（我知道应该是delete，但是当时少打了个e，然后1.0.1上传后我才发现...）
 
 
 配置
