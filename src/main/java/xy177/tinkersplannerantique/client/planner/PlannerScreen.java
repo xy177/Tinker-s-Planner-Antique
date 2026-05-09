@@ -2340,8 +2340,7 @@ public class PlannerScreen extends GuiScreen {
 
         @Override
         public String getValue() {
-            int level = blueprint == null ? 0 : blueprint.getModifierLevel(modifier.getIdentifier());
-            return level > 0 ? String.valueOf(level) : "";
+            return blueprint == null ? "" : blueprint.getModifierDisplayValue(modifier.getIdentifier());
         }
 
         @Override
@@ -2550,7 +2549,7 @@ public class PlannerScreen extends GuiScreen {
             itemRender.renderItemAndEffectIntoGUI(icon, x + 1, y + 1);
             RenderHelper.disableStandardItemLighting();
             String value = entry.getValue();
-            int maxValueWidth = entry instanceof SpecialModifierEntry ? 52 : 34;
+            int maxValueWidth = entry instanceof SpecialModifierEntry || value.indexOf('(') >= 0 ? 52 : 34;
             int valueWidth = value.isEmpty() ? 0 : Math.min(fontRenderer.getStringWidth(value), maxValueWidth);
             if (!value.isEmpty()) {
                 String shownValue = fontRenderer.trimStringToWidth(value, maxValueWidth);

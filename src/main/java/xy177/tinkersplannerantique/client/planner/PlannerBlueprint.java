@@ -195,6 +195,19 @@ final class PlannerBlueprint {
         return result;
     }
 
+    String getModifierDisplayValue(String identifier) {
+        if (identifier == null || identifier.isEmpty()) {
+            return "";
+        }
+        int level = getModifierLevel(identifier);
+        if (level <= 0) {
+            return "";
+        }
+        IModifier modifier = target.resolveModifier(identifier);
+        int materialValue = getModifierMaterialValueCap(modifier, level);
+        return materialValue > 0 ? level + "(" + materialValue + ")" : String.valueOf(level);
+    }
+
     boolean canAddModifier(IModifier modifier) {
         if (!isComplete() || modifier == null) {
             return false;
@@ -329,6 +342,17 @@ final class PlannerBlueprint {
             level++;
         }
         return level;
+    }
+
+    private int getModifierMaterialValueCap(IModifier modifier, int level) {
+        if (modifier == null || level <= 0) {
+            return 0;
+        }
+        if ("luck".equals(modifier.getIdentifier())) {
+            return 60 * level * (level + 1) / 2;
+        }
+        MultiAspectInfo info = getMultiAspectInfo(modifier);
+        return info != null && info.countPerLevel > 1 ? info.countPerLevel * level : 0;
     }
 
     private ModifierProgress getModifierProgress(ItemStack stack, String identifier) {
