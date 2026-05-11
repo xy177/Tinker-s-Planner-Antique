@@ -55,6 +55,21 @@ Common commands:
 - `/ticpa cache refresh`
   Rebuilds the planner UI cache manually.
 
+For Modpack Authors
+-------------------
+
+If your pack plans to use blueprint code import/export across multiple updates, there are two things worth noting:
+
+- Standard blueprint codes are based on TiC item NBT. They are more verbose, but generally do not have cross-version compatibility issues as long as the target environment can still resolve the corresponding NBT data.
+
+- Short blueprint codes depend on `planner_short_list.dat`, located at `(.minecraft\versions\XXX\tinkersplannerantique\planner_short_list.dat)`. In normal use this file is generated automatically, and for the same modpack on the same version, both the generated file and the short blueprint codes will match. However, if a later version of the modpack adds or removes TiC materials, modifiers, or tools, the automatically generated file may differ from older versions, which can make short blueprint codes incompatible across versions.
+
+To keep short blueprint codes stable across modpack versions, you can bundle `planner_short_list.dat` with the modpack and update it with `/ticpa list remake [name]` whenever TiC materials, modifiers, or tools are added or removed.
+
+Short blueprint mode also uses a validation name to distinguish different modpacks and prevent blueprint codes from being used across unrelated environments. This validation name is included as part of the blueprint code itself. By default it comes from the `defaultValidationName` config entry, but modpack authors may want to change it to something more specific for their environment.
+
+These notes only matter if blueprint code import/export is part of your intended workflow. They do not affect the preview functionality itself.
+
 Config
 ------
 
@@ -127,6 +142,21 @@ Config
 
 - `/ticpa cache refresh`
   手动重建蓝图界面缓存。
+
+给整合包作者的说明
+------------------
+
+如果整合包希望在多个版本更新之间继续使用蓝图码导入导出，有两点需要特别注意：
+
+- 标准蓝图码基于 TiC 物品的 NBT。它会更长一些，但只要目标环境仍然能解析对应的 NBT 数据，通常不需要担心跨版本通用性问题。
+
+- 简短蓝图码依赖 `planner_short_list.dat`，其路径位于 `(.minecraft\versions\XXX\tinkersplannerantique\planner_short_list.dat)`。正常情况下这个文件会自动生成，并且只要是同一整合包的同一版本，生成出的文件和短码都会一致。但如果整合包后续版本增减了 TiC 的材料、强化或工具，那么自动生成的文件就可能和旧版本不同，从而导致短码在跨版本时无法通用。
+
+如果希望短码在整合包多个版本之间保持稳定，可以将 `planner_short_list.dat` 直接打包进整合包，并在 TiC 材料、强化或工具发生增减时使用 `/ticpa list remake [name]` 更新这个文件。
+
+此外，简短蓝图码模式还会使用一个验证名来区分不同整合包，防止蓝图码被跨环境误用。这个验证名会被写入蓝图码本身，默认取自配置项 `defaultValidationName`。如果需要更方便地区分不同环境，整合包作者可以主动修改这一项。
+
+以上内容只在你打算使用蓝图码导入导出时才需要关注，对蓝图本身的预览功能没有影响。
 
 配置
 ----
