@@ -49,11 +49,63 @@ Common commands:
 - `/ticpa test print json`
   Exports the current environment's tool, material, trait, modifier, and part registry names as a JSON file with English and Chinese localized names.
 
+- `/ticpa test print power`
+  Exports material power scores as JSON, including the stat and trait contributions used by weight mode. In formula mode, the dump records the active expression, available variables, and the final substituted calculation result.
+
 - `/ticpa test delet <true|false>`
   Toggles debug delete mode for modifier entries. When enabled, deleted modifiers can be marked and hidden in the planner for testing. The command name is kept as `delet` for compatibility with existing 1.0.1 builds.
 
 - `/ticpa cache refresh`
   Rebuilds the planner UI cache manually.
+
+Material Power Sorting
+----------------------
+
+Modpack authors can use an extra material sort called `Power`. It calculates a configurable score for part materials, which is useful when a pack wants to rank materials by its own balance rules instead of a single vanilla TiC stat.
+
+The config file is created at:
+
+- `config/tinkersplannerantique/material_power.json`
+
+By default this feature is disabled, so it will not affect normal players or pack balance unless a modpack author opts in. To enable it, set `"enabled": true` in `material_power.json`. The generated file still includes a small set of general weights and tool/armor formula examples that can be edited for your pack. In the material list, left-click the material icon toggle to show or hide representative material icons, and right-click the same button to enable or cancel `Power` sorting after the feature is enabled.
+
+Generated config files include `_comment_*` fields with bilingual descriptions. These fields are ignored by the loader and can be kept in the file.
+
+Stat keys use the format `statType.fieldName`, such as `head.attack`, `head.miningspeed`, `handle.modifier`, `core.defense`, or `plates.toughness`. A wildcard stat type is also supported, for example `*.durability` or `*.attack`. Wildcard variables sum matching fields across the stat types used by the current part.
+
+Trait values can be combined with one of these `aggregation.trait_mode` values:
+
+- `average`
+- `sum`
+- `max`
+
+You can also enable formula scoring:
+
+```json
+"formula": {
+  "enabled": true,
+  "expression": "",
+  "tool_expression": "sqrt(abs(*.durability * 10)) * sign(*.durability) / 3 + (*.attack + 1) ** 2 + *.miningspeed + *.modifier * 5 + traits.average",
+  "armor_expression": "sqrt(abs(*.durability * 10)) * sign(*.durability) / 3 + *.defense * 6 + *.toughness * 8 + traits.average"
+}
+```
+
+When `formula.enabled` is true, the matching formula is used instead of the weight-sum result. `tool_expression` is used for tools and weapons, `armor_expression` is used for armor, and `expression` is the common fallback when the target-specific field is empty. Supported operators are `+`, `-`, `*`, `/`, `**`, and parentheses. Supported functions are `min`, `max`, `avg`, `abs`, `sqrt`, `sign`, and `clamp`. Invalid, infinite, or NaN formula results are treated as `0` so sorting remains stable.
+
+Available variables include stat fields such as `head.attack`, `extra.durability`, and wildcard fields such as `*.durability`. Trait variables include `traits.total`, `traits.sum`, `traits.average`, `traits.max`, `traits.count`, and `trait.<trait_id>`. The `stats` and `traits` tables are still useful in formula mode because trait variables are based on the configured trait weights, and `/ticpa test print power` also includes the weight-mode breakdown for comparison.
+
+Stats added by other mods can be detected by the planner and exported with `/ticpa power fields`, but they are not automatically appended to `material_power.json` during `/ticpa power reload`. That file is treated as a pack-authored config, so new fields should be copied from `material_power_fields.json` into `stats` or the formula manually before reloading.
+
+Useful commands:
+
+- `/ticpa power fields`
+  Exports `material_power_fields.json`, listing numeric part stat fields detected in the current environment. Use this file as a reference when writing `material_power.json`.
+
+- `/ticpa power reload`
+  Reloads `material_power.json` and clears the in-memory power score cache.
+
+- `/ticpa test print power`
+  Exports `material_power_scores.json`, showing each material's final score and the calculation string used to produce it.
 
 For Modpack Authors
 -------------------
@@ -137,11 +189,63 @@ Config
 - `/ticpa test print json`
   将当前环境中的工具、材料、特性、强化和部件注册名导出为 JSON 文件，并附带英文和中文本地化名称。
 
+- `/ticpa test print power`
+  将材料总评分数导出为 JSON 文件，并列出权重模式使用的属性贡献和特性贡献。公式模式下，导出文件还会记录当前公式、可用变量和最终带入计算结果。
+
 - `/ticpa test delet <true|false>`
   切换调试用的删除模式。开启后，可以在蓝图界面中标记并隐藏已删除的强化条目，方便测试。命令名保留为 `delet` 是为了兼容已经发布的 1.0.1 版本。
 
 - `/ticpa cache refresh`
   手动重建蓝图界面缓存。
+
+材料总评排序
+------------
+
+整合包作者可以使用一个额外的材料排序项：`总评`。它会按照配置为部件材料计算综合分数，适合整合包按自己的平衡规则排序材料，而不是只按某个单独属性排序。
+
+配置文件会生成在：
+
+- `config/tinkersplannerantique/material_power.json`
+
+默认情况下该功能关闭，因此不会在整合包作者主动启用前影响普通玩家或整合包平衡。需要启用时，将 `material_power.json` 中的 `"enabled"` 改为 `true`。生成的文件仍会保留一组通用权重和工具/护甲公式示例，方便按整合包需求编辑。在材料列表中，左键材料图标切换按钮可以显示或隐藏材料代表物图标；功能启用后，右键同一个按钮可以开启或取消 `总评` 排序。
+
+生成的配置文件会包含 `_comment_*` 字段作为双语说明。这些字段会被读取器忽略，可以保留在文件中。
+
+属性键使用 `statType.fieldName` 格式，例如 `head.attack`、`head.miningspeed`、`handle.modifier`、`core.defense` 或 `plates.toughness`。同时也支持通配 statType，例如 `*.durability` 或 `*.attack`。通配变量会汇总当前部件使用的所有 statType 中的同名字段。
+
+特性分数可以通过 `aggregation.trait_mode` 使用以下方式合并：
+
+- `average`
+- `sum`
+- `max`
+
+也可以启用公式评分：
+
+```json
+"formula": {
+  "enabled": true,
+  "expression": "",
+  "tool_expression": "sqrt(abs(*.durability * 10)) * sign(*.durability) / 3 + (*.attack + 1) ** 2 + *.miningspeed + *.modifier * 5 + traits.average",
+  "armor_expression": "sqrt(abs(*.durability * 10)) * sign(*.durability) / 3 + *.defense * 6 + *.toughness * 8 + traits.average"
+}
+```
+
+当 `formula.enabled` 为 `true` 时，会优先使用匹配公式结果，而不是权重相加结果。`tool_expression` 用于工具和武器，`armor_expression` 用于护甲，`expression` 是目标专用字段为空时使用的通用回退公式。公式支持 `+`、`-`、`*`、`/`、`**` 和括号；函数支持 `min`、`max`、`avg`、`abs`、`sqrt`、`sign` 和 `clamp`。无效、无穷大或 NaN 的公式结果会按 `0` 处理，以保证排序稳定。
+
+可用变量包括 `head.attack`、`extra.durability` 这类具体属性字段，也包括 `*.durability` 这类通配字段。特性相关变量包括 `traits.total`、`traits.sum`、`traits.average`、`traits.max`、`traits.count` 和 `trait.<trait_id>`。公式模式下 `stats` 和 `traits` 表仍然有用，因为特性变量基于配置的特性权重生成，且 `/ticpa test print power` 会同时导出权重模式的拆解结果用于对照。
+
+其他模组添加的部件属性可以被蓝图界面自动识别，并通过 `/ticpa power fields` 导出，但 `/ticpa power reload` 不会把这些字段自动追加到 `material_power.json`。这个文件会被视为整合包作者手写的配置，因此新增字段需要先从 `material_power_fields.json` 中查看，再手动写入 `stats` 或公式后重载。
+
+相关指令：
+
+- `/ticpa power fields`
+  导出 `material_power_fields.json`，列出当前环境中检测到的数值型部件属性字段。编写 `material_power.json` 时可以参考这个文件。
+
+- `/ticpa power reload`
+  重新读取 `material_power.json`，并清空内存中的材料总评分数缓存。
+
+- `/ticpa test print power`
+  导出 `material_power_scores.json`，显示每个材料的最终分数和生成该分数的计算字符串。
 
 给整合包作者的说明
 ------------------

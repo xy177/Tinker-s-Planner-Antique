@@ -413,17 +413,25 @@ public class PlannerScreen extends GuiScreen {
     }
 
     private void rebuildSortActionButtons() {
+        if (activeSort == MaterialSortEntry.POWER && !canUsePowerSort()) {
+            activeSort = null;
+        }
         List<MaterialSortEntry> sorts = getCurrentSorts();
-        if (sorts.isEmpty()) {
+        if (sorts.isEmpty() && !canUsePowerSort()) {
             return;
         }
         int y = centerTop + 177;
         int totalButtons = sorts.size() + 1;
         int x = centerLeft + CENTER_W / 2 - (totalButtons * 18 - 2) / 2;
-        addActionButton(x, y, ICON_MATERIAL_ICONS, tooltip("gui.tpa.material_icons"), true, useRepresentativeMaterialIcons ? 1.0F : 0.45F, new PressHandler() {
+        final boolean powerSortActive = activeSort == MaterialSortEntry.POWER;
+        addActionButton(x, y, ICON_MATERIAL_ICONS, getMaterialIconToggleTooltip(), true, useRepresentativeMaterialIcons || powerSortActive ? 1.0F : 0.45F, new PressHandler() {
             @Override
             public void press(int mouseButton) {
-                useRepresentativeMaterialIcons = !useRepresentativeMaterialIcons;
+                if (mouseButton == 1) {
+                    togglePowerSort();
+                } else {
+                    useRepresentativeMaterialIcons = !useRepresentativeMaterialIcons;
+                }
                 refreshLayout();
             }
         });
@@ -880,6 +888,13 @@ public class PlannerScreen extends GuiScreen {
         return I18n.translateToLocalFormatted(key, args);
     }
 
+    private String getMaterialIconToggleTooltip() {
+        String powerLine = I18n.translateToLocalFormatted("gui.tpa.right_toggle_sort", I18n.translateToLocal("gui.tpa.sort.power"));
+        return I18n.translateToLocal("gui.tpa.material_icons")
+            + "\n" + TextFormatting.GREEN + I18n.translateToLocal("gui.tpa.left_toggle_material_icons")
+            + "\n" + (canUsePowerSort() ? TextFormatting.YELLOW : TextFormatting.DARK_GRAY) + powerLine;
+    }
+
     private List<IModifier> getDisplayModifiers() {
         if (blueprint == null) {
             return Collections.emptyList();
@@ -1069,6 +1084,21 @@ public class PlannerScreen extends GuiScreen {
         }
         activeSort = sort.equals(activeSort) ? null : sort;
         refreshLayout();
+    }
+
+    private void togglePowerSort() {
+        if (!canUsePowerSort()) {
+            return;
+        }
+        activeSort = activeSort == MaterialSortEntry.POWER ? null : MaterialSortEntry.POWER;
+    }
+
+    private boolean canUsePowerSort() {
+        if (blueprint == null || selectedPart < 0 || selectedPart >= blueprint.materials.length || materialSelectionMode == MaterialSelectionMode.NONE || materialSelectionMode == MaterialSelectionMode.SPECIAL_MATERIAL) {
+            return false;
+        }
+        PartMaterialType partType = blueprint.target.getRequiredComponents().get(selectedPart);
+        return MaterialPowerScorer.hasApplicableWeights(type, partType);
     }
 
     private void randomize() {
@@ -1314,7 +1344,11 @@ public class PlannerScreen extends GuiScreen {
     private List<Material> getSortedMaterials(PartMaterialType partType) {
         List<Material> materials = getUsableMaterials(partType);
         if (activeSort != null) {
-            materials.sort((left, right) -> activeSort.compare(getPrimaryStatType(partType), left, right));
+            if (activeSort == MaterialSortEntry.POWER) {
+                materials.sort((left, right) -> MaterialPowerScorer.compare(type, partType, left, right));
+            } else {
+                materials.sort((left, right) -> activeSort.compare(getPrimaryStatType(partType), left, right));
+            }
         }
         return materials;
     }
@@ -2723,6 +2757,12 @@ public class PlannerScreen extends GuiScreen {
             @Override
             public double read(IMaterialStats stats) {
                 return readNumberField(stats, "modifier");
+            }
+        });
+        private static final MaterialSortEntry POWER = new MaterialSortEntry(ICON_SORT_GENERIC, "gui.tpa.sort.power", new ValueReader() {
+            @Override
+            public double read(IMaterialStats stats) {
+                return 0;
             }
         });
         private static final MaterialSortEntry ARMOR_DEFENSE = new MaterialSortEntry(ICON_SORT_ARMOR, "gui.tpa.sort.armor", new ValueReader() {

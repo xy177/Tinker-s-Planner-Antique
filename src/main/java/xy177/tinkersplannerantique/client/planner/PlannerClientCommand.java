@@ -18,6 +18,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.translation.I18n;
 import net.minecraftforge.client.IClientCommand;
+import xy177.tinkersplannerantique.MaterialPowerConfig;
 import xy177.tinkersplannerantique.PlannerConfig;
 
 public final class PlannerClientCommand extends CommandBase implements IClientCommand {
@@ -29,7 +30,7 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
 
     @Override
     public String getUsage(ICommandSender sender) {
-        return "/ticpa list output [name] | /ticpa list reset [name] | /ticpa list remake [name] | /ticpa cache refresh | /ticpa test delet <true|false> | /ticpa test print <modpack|list|json>";
+        return "/ticpa list output [name] | /ticpa list reset [name] | /ticpa list remake [name] | /ticpa cache refresh | /ticpa power <reload|fields> | /ticpa test delet <true|false> | /ticpa test print <modpack|list|json|power>";
     }
 
     @Override
@@ -45,7 +46,7 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
     @Override
     public List<String> getTabCompletions(MinecraftServer server, ICommandSender sender, String[] args, BlockPos targetPos) {
         if (args.length == 1) {
-            return getListOfStringsMatchingLastWord(args, "list", "cache", "test");
+            return getListOfStringsMatchingLastWord(args, "list", "cache", "power", "test");
         }
         if (args.length == 2) {
             String root = args[0].toLowerCase(Locale.ROOT);
@@ -55,6 +56,9 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
             if ("cache".equals(root)) {
                 return getListOfStringsMatchingLastWord(args, "refresh");
             }
+            if ("power".equals(root)) {
+                return getListOfStringsMatchingLastWord(args, "reload", "fields");
+            }
             if ("test".equals(root)) {
                 return getListOfStringsMatchingLastWord(args, "delet", "print");
             }
@@ -63,7 +67,7 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
             return getListOfStringsMatchingLastWord(args, "true", "false");
         }
         if (args.length == 3 && "test".equalsIgnoreCase(args[0]) && "print".equalsIgnoreCase(args[1])) {
-            return getListOfStringsMatchingLastWord(args, "modpack", "list", "json");
+            return getListOfStringsMatchingLastWord(args, "modpack", "list", "json", "power");
         }
         return Collections.emptyList();
     }
@@ -88,6 +92,9 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
                 return;
             case "cache":
                 handleCache(sender, args);
+                return;
+            case "power":
+                handlePower(sender, args);
                 return;
             case "test":
                 handleTest(sender, args);
@@ -207,9 +214,31 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
         sender.sendMessage(new TextComponentString(I18n.translateToLocal("gui.tpa.cache_refreshed")));
     }
 
+    private void handlePower(ICommandSender sender, String[] args) throws CommandException {
+        if (args.length != 2) {
+            throw new WrongUsageException("/ticpa power <reload|fields>");
+        }
+        if ("reload".equalsIgnoreCase(args[1])) {
+            MaterialPowerConfig.reload();
+            MaterialPowerScorer.clearCache();
+            sender.sendMessage(new TextComponentString(I18n.translateToLocal("gui.tpa.power_reloaded")));
+            return;
+        }
+        if ("fields".equalsIgnoreCase(args[1])) {
+            try {
+                File file = MaterialPowerFieldsExporter.export(PlannerClientEvents.getDataFolder(), PlannerClientEvents.getAllTargets());
+                sender.sendMessage(new TextComponentString(I18n.translateToLocalFormatted("gui.tpa.power_fields_exported", file.getAbsolutePath())));
+                return;
+            } catch (IOException e) {
+                throw localized(e);
+            }
+        }
+        throw new WrongUsageException("/ticpa power <reload|fields>");
+    }
+
     private void handleTest(ICommandSender sender, String[] args) throws CommandException {
         if (args.length != 3) {
-            throw new WrongUsageException("/ticpa test delet <true|false> | /ticpa test print <modpack|list|json>");
+            throw new WrongUsageException("/ticpa test delet <true|false> | /ticpa test print <modpack|list|json|power>");
         }
         if ("delet".equalsIgnoreCase(args[1])) {
             handleTestDelete(sender, args[2]);
@@ -219,7 +248,7 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
             handleTestPrint(sender, args[2]);
             return;
         }
-        throw new WrongUsageException("/ticpa test delet <true|false> | /ticpa test print <modpack|list|json>");
+        throw new WrongUsageException("/ticpa test delet <true|false> | /ticpa test print <modpack|list|json|power>");
     }
 
     private void handleTestDelete(ICommandSender sender, String value) throws CommandException {
@@ -245,6 +274,15 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
                 throw localized(e);
             }
         }
+        if ("power".equalsIgnoreCase(value)) {
+            try {
+                File file = MaterialPowerScoreExporter.export(PlannerClientEvents.getDataFolder(), PlannerClientEvents.getAllTargets());
+                sender.sendMessage(new TextComponentString("Generated material power score JSON: " + file.getAbsolutePath()));
+                return;
+            } catch (IOException e) {
+                throw localized(e);
+            }
+        }
 
         PlannerShortCodeList.Counts counts;
         String labelKey;
@@ -259,7 +297,7 @@ public final class PlannerClientCommand extends CommandBase implements IClientCo
             counts = list.countEntries();
             labelKey = "gui.tpa.print_list";
         } else {
-            throw new WrongUsageException("/ticpa test print <modpack|list|json>");
+            throw new WrongUsageException("/ticpa test print <modpack|list|json|power>");
         }
         sender.sendMessage(new TextComponentString(I18n.translateToLocalFormatted(
             "gui.tpa.print_counts",

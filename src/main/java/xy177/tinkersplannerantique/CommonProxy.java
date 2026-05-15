@@ -9,6 +9,7 @@ public class CommonProxy {
 
     public void preInit(FMLPreInitializationEvent event) {
         PlannerConfig.init(event.getModConfigurationDirectory());
+        MaterialPowerConfig.init(event.getModConfigurationDirectory());
         PlannerNetwork.init();
     }
 
