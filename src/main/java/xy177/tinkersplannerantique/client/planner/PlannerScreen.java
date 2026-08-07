@@ -21,6 +21,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.util.ITooltipFlag;
@@ -34,6 +35,8 @@ import net.minecraft.util.text.TextFormatting;
 import net.minecraft.util.text.translation.I18n;
 import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.oredict.OreDictionary;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 import slimeknights.tconstruct.library.materials.ExtraMaterialStats;
 import slimeknights.tconstruct.library.materials.HandleMaterialStats;
 import slimeknights.tconstruct.library.materials.Material;
@@ -87,6 +90,7 @@ public class PlannerScreen extends GuiScreen {
     private static final ResourceLocation ICON_TAB_BUTTON_LIGHT = icon("tab_button_light");
     private static final ResourceLocation ICON_TAB_BUTTON_DARK = icon("tab_button_dark");
     private static final ResourceLocation ICON_MATERIAL_ICONS = new ResourceLocation("minecraft", "textures/items/iron_ingot.png");
+    private static final ResourceLocation ICON_SORT_POWER = new ResourceLocation("minecraft", "textures/items/nether_star.png");
     private static final ResourceLocation ICON_SORT_WEIGHT = icon("sort_weight");
     private static final ResourceLocation ICON_SORT_FRICTION = new ResourceLocation("minecraft", "textures/items/dye_powder_black.png");
     private static final ResourceLocation ICON_SORT_YOYO_LENGTH = new ResourceLocation("yoyos", "textures/items/cord.png");
@@ -127,6 +131,8 @@ public class PlannerScreen extends GuiScreen {
     private static final int TAB_W = 38;
     private static final int TAB_H = 20;
     private static final int TAB_GAP = 4;
+    private static final int SEARCH_W = 122;
+    private static final int SEARCH_H = 18;
     private static final int TOOL_PREVIEW_X = 13;
     private static final int TOOL_PREVIEW_Y = 24;
     private static final int TOOL_PREVIEW_SIZE = 81;
@@ -202,6 +208,9 @@ public class PlannerScreen extends GuiScreen {
     private ItemStack deferredTooltipStack = ItemStack.EMPTY;
     private List<String> deferredTooltipLines;
     private String selectedTraitFilterId;
+    private GuiTextField searchField;
+    private String searchText = "";
+    private ItemStack hoveredRecipeStack = ItemStack.EMPTY;
 
     PlannerScreen(GuiScreen parent, PlannerTarget.TargetType type, List<? extends PlannerTarget> targets) {
         this.parent = parent;
@@ -224,6 +233,8 @@ public class PlannerScreen extends GuiScreen {
 
     @Override
     public void initGui() {
+        boolean searchFocused = searchField != null && searchField.isFocused();
+        int searchCursor = searchField == null ? searchText.length() : searchField.getCursorPosition();
         buttonList.clear();
         toolButtons.clear();
         bookmarkButtons.clear();
@@ -237,6 +248,11 @@ public class PlannerScreen extends GuiScreen {
         centerTop = height / 2 - CENTER_H / 2;
         leftPanelLeft = centerLeft - LEFT_W - GAP;
         rightPanelLeft = centerLeft + CENTER_W;
+        searchField = new GuiTextField(0, fontRenderer, getSearchX(), centerTop - 22, SEARCH_W, SEARCH_H);
+        searchField.setMaxStringLength(64);
+        searchField.setText(searchText);
+        searchField.setFocused(searchFocused);
+        searchField.setCursorPosition(Math.min(searchCursor, searchText.length()));
 
         if (ConArmPresence.isLoaded()) {
             int tabX = leftPanelLeft + (LEFT_W - TAB_W * 2 - TAB_GAP) / 2;
@@ -255,6 +271,7 @@ public class PlannerScreen extends GuiScreen {
     }
 
     private void rebuildToolButtons() {
+        toolPage = clampPage(toolPage, targets.size(), 15);
         int start = toolPage * 15;
         int end = Math.min(targets.size(), start + 15);
         for (int i = start; i < end; i++) {
@@ -267,6 +284,7 @@ public class PlannerScreen extends GuiScreen {
 
     private void rebuildBookmarkButtons() {
         int bookmarkTop = centerTop;
+        bookmarkPage = clampPage(bookmarkPage, savedBlueprints.size(), 25);
         int start = bookmarkPage * 25;
         int end = Math.min(savedBlueprints.size(), start + 25);
         for (int i = start; i < end; i++) {
@@ -298,6 +316,7 @@ public class PlannerScreen extends GuiScreen {
             return;
         }
         List<MaterialOption> options = getDisplayedMaterialOptions();
+        materialPage = clampPage(materialPage, options.size(), 27);
         if (options.isEmpty()) {
             return;
         }
@@ -319,14 +338,10 @@ public class PlannerScreen extends GuiScreen {
         List<TraitFilterEntry> traits = getCurrentPartTraits();
         int panelTop = centerTop + LEFT_TOP_H + TRAIT_PANEL_GAP;
         int panelBottom = centerTop + CENTER_H;
-        int maxRows = Math.max(0, (panelBottom - panelTop - 26) / TRAIT_ROW_H);
+        int maxRows = getTraitRowsPerPage();
+        traitPage = clampPage(traitPage, traits.size(), maxRows);
         int start = traitPage * maxRows;
         int end = maxRows <= 0 ? 0 : Math.min(traits.size(), start + maxRows);
-        if (start >= traits.size() && traitPage > 0) {
-            traitPage = 0;
-            start = 0;
-            end = Math.min(traits.size(), maxRows);
-        }
         int count = Math.max(0, end - start);
         for (int i = 0; i < count; i++) {
             TraitFilterEntry trait = traits.get(start + i);
@@ -417,27 +432,40 @@ public class PlannerScreen extends GuiScreen {
             activeSort = null;
         }
         List<MaterialSortEntry> sorts = getCurrentSorts();
-        if (sorts.isEmpty() && !canUsePowerSort()) {
+        if (sorts.isEmpty()) {
             return;
         }
-        int y = centerTop + 177;
+        int baseY = centerTop + 177;
         int totalButtons = sorts.size() + 1;
-        int x = centerLeft + CENTER_W / 2 - (totalButtons * 18 - 2) / 2;
-        final boolean powerSortActive = activeSort == MaterialSortEntry.POWER;
-        addActionButton(x, y, ICON_MATERIAL_ICONS, getMaterialIconToggleTooltip(), true, useRepresentativeMaterialIcons || powerSortActive ? 1.0F : 0.45F, new PressHandler() {
+        boolean twoRows = totalButtons > 4;
+        int iconX = getSortButtonX(0, totalButtons);
+        int iconY = getSortButtonY(0, baseY, twoRows);
+        addActionButton(iconX, iconY, ICON_MATERIAL_ICONS, getMaterialIconToggleTooltip(), true, useRepresentativeMaterialIcons ? 1.0F : 0.45F, new PressHandler() {
             @Override
             public void press(int mouseButton) {
-                if (mouseButton == 1) {
-                    togglePowerSort();
-                } else {
-                    useRepresentativeMaterialIcons = !useRepresentativeMaterialIcons;
-                }
+                useRepresentativeMaterialIcons = !useRepresentativeMaterialIcons;
                 refreshLayout();
             }
         });
         for (int i = 0; i < sorts.size(); i++) {
-            addSortButton(x + (i + 1) * 18, y, sorts.get(i));
+            int buttonIndex = i + 1;
+            addSortButton(getSortButtonX(buttonIndex, totalButtons), getSortButtonY(buttonIndex, baseY, twoRows), sorts.get(i));
         }
+    }
+
+    private int getSortButtonX(int index, int totalButtons) {
+        int row = index / 4;
+        int column = index % 4;
+        int rowStart = row * 4;
+        int rowButtons = Math.min(4, totalButtons - rowStart);
+        return centerLeft + CENTER_W / 2 - (rowButtons * 18 - 2) / 2 + column * 18;
+    }
+
+    private int getSortButtonY(int index, int baseY, boolean twoRows) {
+        if (!twoRows) {
+            return baseY;
+        }
+        return index < 4 ? baseY - 6 : baseY + 9;
     }
 
     private void addSortButton(int x, int y, final MaterialSortEntry sort) {
@@ -473,6 +501,7 @@ public class PlannerScreen extends GuiScreen {
             return;
         }
         List<ModifierListEntry> entries = getModifierEntries();
+        modifierPage = clampPage(modifierPage, entries.size(), 9);
         int start = modifierPage * 9;
         int end = Math.min(entries.size(), start + 9);
         for (int i = start; i < end; i++) {
@@ -510,44 +539,16 @@ public class PlannerScreen extends GuiScreen {
                 mc.displayGuiScreen(new PlannerScreen(parent, PlannerTarget.TargetType.ARMOR, PlannerClientEvents.getArmorTargets()));
                 return;
             case BTN_PREV_TOOL:
-                toolPage--;
-                refreshLayout();
-                return;
             case BTN_NEXT_TOOL:
-                toolPage++;
-                refreshLayout();
-                return;
             case BTN_PREV_BOOKMARK:
-                bookmarkPage--;
-                refreshLayout();
-                return;
             case BTN_NEXT_BOOKMARK:
-                bookmarkPage++;
-                refreshLayout();
-                return;
             case BTN_PREV_MATERIAL:
-                materialPage--;
-                refreshLayout();
-                return;
             case BTN_NEXT_MATERIAL:
-                materialPage++;
-                refreshLayout();
-                return;
             case BTN_PREV_MOD:
-                modifierPage--;
-                refreshLayout();
-                return;
             case BTN_NEXT_MOD:
-                modifierPage++;
-                refreshLayout();
-                return;
             case BTN_PREV_TRAIT:
-                traitPage--;
-                refreshLayout();
-                return;
             case BTN_NEXT_TRAIT:
-                traitPage++;
-                refreshLayout();
+                navigatePage(button.id, true);
                 return;
             default:
                 if (button.id >= ID_TOOL_BASE && button.id < ID_BOOKMARK_BASE) {
@@ -559,8 +560,6 @@ public class PlannerScreen extends GuiScreen {
                     if (index >= 0 && index < savedBlueprints.size()) {
                         blueprint = savedBlueprints.get(index).copy();
                         selectedPart = -1;
-                        materialPage = 0;
-                        modifierPage = 0;
                         activeSort = null;
                         materialSelectionMode = MaterialSelectionMode.NONE;
                         refreshLayout();
@@ -570,8 +569,6 @@ public class PlannerScreen extends GuiScreen {
                 if (button.id >= ID_PART_BASE && button.id < ID_MATERIAL_BASE) {
                     selectedPart = button.id - ID_PART_BASE;
                     materialSelectionMode = MaterialSelectionMode.PART;
-                    materialPage = 0;
-                    traitPage = 0;
                     activeSort = null;
                     selectedTraitFilterId = null;
                     refreshLayout();
@@ -586,6 +583,12 @@ public class PlannerScreen extends GuiScreen {
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        if (searchField != null) {
+            searchField.mouseClicked(mouseX, mouseY, mouseButton);
+            if (mouseButton == 0 && contains(mouseX, mouseY, getSearchX(), centerTop - 22, SEARCH_W, SEARCH_H)) {
+                return;
+            }
+        }
         if (mousePressedRightPanelPageButton(mouseX, mouseY)) {
             return;
         }
@@ -610,8 +613,6 @@ public class PlannerScreen extends GuiScreen {
                 if (mouseButton == 1 && selectedPart == partIndex && blueprint != null && partIndex >= 0 && partIndex < blueprint.materials.length) {
                     blueprint.materials[partIndex] = null;
                     materialSelectionMode = MaterialSelectionMode.PART;
-                    materialPage = 0;
-                    traitPage = 0;
                     activeSort = null;
                     refreshLayout();
                     return;
@@ -653,6 +654,7 @@ public class PlannerScreen extends GuiScreen {
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         clearDeferredTooltip();
+        hoveredRecipeStack = ItemStack.EMPTY;
         drawDefaultBackground();
         drawLeftPanels(mouseX, mouseY);
         drawCenterPanel(mouseX, mouseY);
@@ -660,11 +662,29 @@ public class PlannerScreen extends GuiScreen {
             drawRightPanel(mouseX, mouseY);
         }
         super.drawScreen(mouseX, mouseY, partialTicks);
+        drawSearchField(mouseX, mouseY);
         resetCustomRenderState();
         drawCustomButtons(mouseX, mouseY);
         resetCustomRenderState();
         drawRightPanelPageButtons(mouseX, mouseY);
         drawDeferredTooltip(mouseX, mouseY);
+    }
+
+    private void drawSearchField(int mouseX, int mouseY) {
+        if (searchField == null) {
+            return;
+        }
+        searchField.drawTextBox();
+        if (searchText.isEmpty() && !searchField.isFocused()) {
+            fontRenderer.drawString(I18n.translateToLocal("gui.tpa.search"), getSearchX() + 4, centerTop - 17, 0x808080);
+        }
+        if (contains(mouseX, mouseY, getSearchX(), centerTop - 22, SEARCH_W, SEARCH_H)) {
+            deferTooltip(expandTooltipLines(I18n.translateToLocal("gui.tpa.search_hint"), TextFormatting.GRAY));
+        }
+    }
+
+    private int getSearchX() {
+        return centerLeft + (CENTER_W - SEARCH_W) / 2;
     }
 
     private void resetCustomRenderState() {
@@ -802,8 +822,127 @@ public class PlannerScreen extends GuiScreen {
         itemRender.renderItemAndEffectIntoGUI(output, centerLeft + CENTER_W - 34, centerTop + 58);
         RenderHelper.disableStandardItemLighting();
         if (mouseX >= centerLeft + CENTER_W - 34 && mouseX < centerLeft + CENTER_W - 18 && mouseY >= centerTop + 58 && mouseY < centerTop + 74) {
+            hoveredRecipeStack = output.copy();
             deferTooltip(output);
         }
+    }
+
+    @Override
+    public void handleMouseInput() throws IOException {
+        super.handleMouseInput();
+        int wheel = Mouse.getEventDWheel();
+        if (wheel == 0) {
+            return;
+        }
+        int mouseX = Mouse.getEventX() * width / mc.displayWidth;
+        int mouseY = height - Mouse.getEventY() * height / mc.displayHeight - 1;
+        int pageButton = getHoveredListPageButton(mouseX, mouseY, wheel < 0);
+        if (pageButton != -1) {
+            navigatePage(pageButton, false);
+        }
+    }
+
+    private int getHoveredListPageButton(int mouseX, int mouseY, boolean forward) {
+        if (contains(mouseX, mouseY, leftPanelLeft, centerTop, LEFT_W, LEFT_TOP_H)) {
+            return forward ? BTN_NEXT_TOOL : BTN_PREV_TOOL;
+        }
+        int traitTop = centerTop + LEFT_TOP_H + TRAIT_PANEL_GAP;
+        if (shouldShowTraitFilterPanel() && contains(mouseX, mouseY, leftPanelLeft, traitTop, LEFT_W, centerTop + CENTER_H - traitTop)) {
+            return forward ? BTN_NEXT_TRAIT : BTN_PREV_TRAIT;
+        }
+        if (contains(mouseX, mouseY, centerLeft, centerTop + 115, CENTER_W, CENTER_H - 115)) {
+            return forward ? BTN_NEXT_MATERIAL : BTN_PREV_MATERIAL;
+        }
+        if (rightPanelMode != RightPanelMode.NONE && contains(mouseX, mouseY, rightPanelLeft, centerTop, RIGHT_W, CENTER_H)) {
+            if (rightPanelMode == RightPanelMode.BOOKMARKS) {
+                return forward ? BTN_NEXT_BOOKMARK : BTN_PREV_BOOKMARK;
+            }
+            return forward ? BTN_NEXT_MOD : BTN_PREV_MOD;
+        }
+        return -1;
+    }
+
+    private static boolean contains(int mouseX, int mouseY, int x, int y, int width, int height) {
+        return mouseX >= x && mouseY >= y && mouseX < x + width && mouseY < y + height;
+    }
+
+    private void navigatePage(int buttonId, boolean useKeyModifiers) {
+        boolean forward = buttonId == BTN_NEXT_TOOL || buttonId == BTN_NEXT_BOOKMARK || buttonId == BTN_NEXT_MATERIAL
+                || buttonId == BTN_NEXT_MOD || buttonId == BTN_NEXT_TRAIT;
+        int currentPage;
+        int lastPage;
+        switch (buttonId) {
+            case BTN_PREV_TOOL:
+            case BTN_NEXT_TOOL:
+                currentPage = toolPage;
+                lastPage = getLastPage(targets.size(), 15);
+                break;
+            case BTN_PREV_BOOKMARK:
+            case BTN_NEXT_BOOKMARK:
+                currentPage = bookmarkPage;
+                lastPage = getLastPage(savedBlueprints.size(), 25);
+                break;
+            case BTN_PREV_MATERIAL:
+            case BTN_NEXT_MATERIAL:
+                currentPage = materialPage;
+                lastPage = getLastPage(getDisplayedMaterialOptions().size(), 27);
+                break;
+            case BTN_PREV_MOD:
+            case BTN_NEXT_MOD:
+                currentPage = modifierPage;
+                lastPage = getLastPage(getModifierEntries().size(), 9);
+                break;
+            case BTN_PREV_TRAIT:
+            case BTN_NEXT_TRAIT:
+                currentPage = traitPage;
+                lastPage = getLastPage(getCurrentPartTraits().size(), getTraitRowsPerPage());
+                break;
+            default:
+                return;
+        }
+
+        int nextPage;
+        if (useKeyModifiers && isCtrlKeyDown()) {
+            nextPage = forward ? lastPage : 0;
+        } else {
+            int distance = useKeyModifiers && isShiftKeyDown() ? 5 : 1;
+            nextPage = Math.max(0, Math.min(lastPage, currentPage + (forward ? distance : -distance)));
+        }
+        if (nextPage == currentPage) {
+            return;
+        }
+
+        switch (buttonId) {
+            case BTN_PREV_TOOL:
+            case BTN_NEXT_TOOL:
+                toolPage = nextPage;
+                break;
+            case BTN_PREV_BOOKMARK:
+            case BTN_NEXT_BOOKMARK:
+                bookmarkPage = nextPage;
+                break;
+            case BTN_PREV_MATERIAL:
+            case BTN_NEXT_MATERIAL:
+                materialPage = nextPage;
+                break;
+            case BTN_PREV_MOD:
+            case BTN_NEXT_MOD:
+                modifierPage = nextPage;
+                break;
+            case BTN_PREV_TRAIT:
+            case BTN_NEXT_TRAIT:
+                traitPage = nextPage;
+                break;
+            default:
+                return;
+        }
+        refreshLayout();
+    }
+
+    private int getTraitRowsPerPage() {
+        int panelTop = centerTop + LEFT_TOP_H + TRAIT_PANEL_GAP;
+        int panelBottom = centerTop + CENTER_H;
+        return Math.max(0, (panelBottom - panelTop - 26) / TRAIT_ROW_H);
     }
 
     private void clearDeferredTooltip() {
@@ -889,10 +1028,8 @@ public class PlannerScreen extends GuiScreen {
     }
 
     private String getMaterialIconToggleTooltip() {
-        String powerLine = I18n.translateToLocalFormatted("gui.tpa.right_toggle_sort", I18n.translateToLocal("gui.tpa.sort.power"));
         return I18n.translateToLocal("gui.tpa.material_icons")
-            + "\n" + TextFormatting.GREEN + I18n.translateToLocal("gui.tpa.left_toggle_material_icons")
-            + "\n" + (canUsePowerSort() ? TextFormatting.YELLOW : TextFormatting.DARK_GRAY) + powerLine;
+            + "\n" + TextFormatting.GREEN + I18n.translateToLocal("gui.tpa.left_toggle_material_icons");
     }
 
     private List<IModifier> getDisplayModifiers() {
@@ -977,11 +1114,41 @@ public class PlannerScreen extends GuiScreen {
             head.add(new NormalModifierEntry(modifier));
         }
         head.addAll(tail);
+        if (!getSearchQuery().isEmpty()) {
+            head.removeIf(entry -> !matchesModifierSearch(entry));
+        }
         return head;
+    }
+
+    private boolean matchesModifierSearch(ModifierListEntry entry) {
+        String identifier;
+        List<String> tooltip = new ArrayList<>();
+        if (entry instanceof NormalModifierEntry) {
+            IModifier modifier = ((NormalModifierEntry) entry).modifier;
+            identifier = modifier.getIdentifier();
+            tooltip.add(modifier.getLocalizedName());
+            tooltip.add(modifier.getLocalizedDesc());
+            tooltip.addAll(getModifierApplicationItemNames(modifier));
+        } else if (entry instanceof SpecialModifierEntry) {
+            identifier = ((SpecialModifierEntry) entry).specialType.name().toLowerCase(Locale.ROOT);
+            tooltip.addAll(entry.getTooltip());
+        } else {
+            identifier = "toollevel";
+            tooltip.addAll(entry.getTooltip());
+        }
+        return matchesSearch(entry.getLabel(), identifier, tooltip);
     }
 
     private void refreshLayout() {
         initGui();
+    }
+
+    private static int clampPage(int page, int itemCount, int pageSize) {
+        return Math.max(0, Math.min(page, getLastPage(itemCount, pageSize)));
+    }
+
+    private static int getLastPage(int itemCount, int pageSize) {
+        return itemCount <= 0 || pageSize <= 0 ? 0 : (itemCount - 1) / pageSize;
     }
 
     private boolean isCurrentTarget(int index) {
@@ -997,9 +1164,6 @@ public class PlannerScreen extends GuiScreen {
             }
             blueprint = new PlannerBlueprint(targets.get(index));
             selectedPart = -1;
-            materialPage = 0;
-            modifierPage = 0;
-            traitPage = 0;
             activeSort = null;
             selectedTraitFilterId = null;
             materialSelectionMode = MaterialSelectionMode.NONE;
@@ -1010,9 +1174,6 @@ public class PlannerScreen extends GuiScreen {
     private void clearTargetSelection() {
         blueprint = null;
         selectedPart = -1;
-        materialPage = 0;
-        modifierPage = 0;
-        traitPage = 0;
         activeSort = null;
         selectedTraitFilterId = null;
         materialSelectionMode = MaterialSelectionMode.NONE;
@@ -1025,9 +1186,6 @@ public class PlannerScreen extends GuiScreen {
         if (!targets.isEmpty()) {
             blueprint = new PlannerBlueprint(targets.get(random.nextInt(targets.size())));
             selectedPart = -1;
-            materialPage = 0;
-            modifierPage = 0;
-            traitPage = 0;
             activeSort = null;
             selectedTraitFilterId = null;
             materialSelectionMode = MaterialSelectionMode.NONE;
@@ -1084,13 +1242,6 @@ public class PlannerScreen extends GuiScreen {
         }
         activeSort = sort.equals(activeSort) ? null : sort;
         refreshLayout();
-    }
-
-    private void togglePowerSort() {
-        if (!canUsePowerSort()) {
-            return;
-        }
-        activeSort = activeSort == MaterialSortEntry.POWER ? null : MaterialSortEntry.POWER;
     }
 
     private boolean canUsePowerSort() {
@@ -1155,8 +1306,6 @@ public class PlannerScreen extends GuiScreen {
 
     private void toggleRightPanel(RightPanelMode mode) {
         rightPanelMode = rightPanelMode == mode ? RightPanelMode.NONE : mode;
-        bookmarkPage = 0;
-        modifierPage = 0;
         refreshLayout();
     }
 
@@ -1400,13 +1549,16 @@ public class PlannerScreen extends GuiScreen {
                 continue;
             }
             ItemStack tooltipStack = getPartDisplayStack(selectedPart, part, material);
+            if (!matchesMaterialSearch(material, tooltipStack)) {
+                continue;
+            }
             options.add(new MaterialOption(material, getDisplayedMaterialStack(material, tooltipStack), tooltipStack, material.getLocalizedName(), blueprint.materials[selectedPart] == material));
         }
         return options;
     }
 
     private boolean shouldShowTraitFilterPanel() {
-        return blueprint != null && materialSelectionMode != MaterialSelectionMode.EMBOSS && materialSelectionMode != MaterialSelectionMode.EMBOSS2 && materialSelectionMode != MaterialSelectionMode.SPECIAL_MATERIAL;
+        return blueprint != null && materialSelectionMode != MaterialSelectionMode.SPECIAL_MATERIAL;
     }
 
     private List<TraitFilterEntry> getCurrentPartTraits() {
@@ -1417,9 +1569,20 @@ public class PlannerScreen extends GuiScreen {
             return getAllMaterialTraits();
         }
         PartMaterialType partType = blueprint.target.getRequiredComponents().get(selectedPart);
-        IToolPart part = getDisplayPart(partType);
         Map<String, TraitFilterEntry> traits = new LinkedHashMap<>();
         Set<String> traitLabels = new LinkedHashSet<>();
+        if (materialSelectionMode == MaterialSelectionMode.EMBOSS || materialSelectionMode == MaterialSelectionMode.EMBOSS2) {
+            boolean second = materialSelectionMode == MaterialSelectionMode.EMBOSS2;
+            Material selectedMaterial = getModifierMaterial(blueprint.target.resolveModifier(second ? blueprint.secondEmbossModifierId : blueprint.embossModifierId));
+            if (selectedMaterial != null) {
+                addMaterialTraits(traits, traitLabels, partType, selectedMaterial);
+            } else {
+                for (Material material : getEmbossMaterials(second)) {
+                    addMaterialTraits(traits, traitLabels, partType, material);
+                }
+            }
+            return filterTraitEntries(traits.values());
+        }
         Material selectedMaterial = blueprint.materials[selectedPart];
         if (selectedMaterial != null) {
             addMaterialTraits(traits, traitLabels, partType, selectedMaterial);
@@ -1428,9 +1591,7 @@ public class PlannerScreen extends GuiScreen {
                 addMaterialTraits(traits, traitLabels, partType, material);
             }
         }
-        List<TraitFilterEntry> result = new ArrayList<>(traits.values());
-        result.sort((left, right) -> left.label.compareToIgnoreCase(right.label));
-        return result;
+        return filterTraitEntries(traits.values());
     }
 
     private List<TraitFilterEntry> getAllMaterialTraits() {
@@ -1441,7 +1602,19 @@ public class PlannerScreen extends GuiScreen {
                 addMaterialTraits(traits, traitLabels, partType, material);
             }
         }
-        List<TraitFilterEntry> result = new ArrayList<>(traits.values());
+        return filterTraitEntries(traits.values());
+    }
+
+    private List<TraitFilterEntry> filterTraitEntries(Collection<TraitFilterEntry> entries) {
+        List<TraitFilterEntry> result = new ArrayList<>();
+        for (TraitFilterEntry entry : entries) {
+            List<String> tooltip = new ArrayList<>();
+            tooltip.add(entry.label);
+            tooltip.add(entry.description);
+            if (matchesSearch(entry.label, entry.id, tooltip)) {
+                result.add(entry);
+            }
+        }
         result.sort((left, right) -> left.label.compareToIgnoreCase(right.label));
         return result;
     }
@@ -1493,15 +1666,32 @@ public class PlannerScreen extends GuiScreen {
         List<MaterialOption> options = new ArrayList<>();
         String selectedMaterialId = getModifierMaterialId(second ? blueprint.secondEmbossModifierId : blueprint.embossModifierId);
         PartMaterialType partType = blueprint.target.getRequiredComponents().get(selectedPart);
-        for (Material material : getSortedMaterials(partType)) {
-            IModifier modifier = second ? getSecondEmbossModifier(material, selectedPart) : getEmbossModifier(material, selectedPart);
-            if (modifier != null) {
-                boolean highlighted = second ? blueprint.hasSecondEmboss() && blueprint.secondEmbossPartIndex == selectedPart : blueprint.hasEmboss() && blueprint.embossPartIndex == selectedPart;
-                ItemStack tooltipStack = part.getItemstackWithMaterial(material);
+        for (Material material : getEmbossMaterials(second)) {
+            if (selectedTraitFilterId != null && !getPartTraitIdentifiers(partType, material).contains(selectedTraitFilterId)) {
+                continue;
+            }
+            boolean highlighted = second ? blueprint.hasSecondEmboss() && blueprint.secondEmbossPartIndex == selectedPart : blueprint.hasEmboss() && blueprint.embossPartIndex == selectedPart;
+            ItemStack tooltipStack = part.getItemstackWithMaterial(material);
+            if (matchesMaterialSearch(material, tooltipStack)) {
                 options.add(new MaterialOption(material, getDisplayedMaterialStack(material, tooltipStack), tooltipStack, material.getLocalizedName(), highlighted && material.getIdentifier().equals(selectedMaterialId)));
             }
         }
         return options;
+    }
+
+    private List<Material> getEmbossMaterials(boolean second) {
+        if (blueprint == null || selectedPart < 0 || selectedPart >= blueprint.materials.length) {
+            return Collections.emptyList();
+        }
+        PartMaterialType partType = blueprint.target.getRequiredComponents().get(selectedPart);
+        List<Material> materials = new ArrayList<>();
+        for (Material material : getSortedMaterials(partType)) {
+            IModifier modifier = second ? getSecondEmbossModifier(material, selectedPart) : getEmbossModifier(material, selectedPart);
+            if (modifier != null) {
+                materials.add(material);
+            }
+        }
+        return materials;
     }
 
     private List<MaterialOption> getSpecialMaterialOptions() {
@@ -1523,9 +1713,12 @@ public class PlannerScreen extends GuiScreen {
             }
             Material material = getModifierMaterial(modifier);
             ItemStack stack = getSpecialMaterialDisplayStack(material);
-            if (material != null && !stack.isEmpty() && isValidSpecialMaterialDisplay(material, stack)) {
+            if (material != null && !stack.isEmpty() && isValidSpecialMaterialDisplay(material, stack) && matchesMaterialSearch(material, stack)) {
                 options.add(new MaterialOption(material, stack, stack, material.getLocalizedName(), material.getIdentifier().equals(selectedMaterialId)));
             }
+        }
+        if (activeSort == MaterialSortEntry.HEAD_HARVEST) {
+            options.sort((left, right) -> activeSort.compare(MaterialTypes.HEAD, left.material, right.material));
         }
         return options;
     }
@@ -1892,7 +2085,16 @@ public class PlannerScreen extends GuiScreen {
 
     private List<MaterialSortEntry> getCurrentSorts() {
         List<MaterialSortEntry> sorts = new ArrayList<>();
-        if (blueprint == null || selectedPart < 0 || selectedPart >= blueprint.materials.length || materialSelectionMode == MaterialSelectionMode.NONE || materialSelectionMode == MaterialSelectionMode.SPECIAL_MATERIAL) {
+        if (blueprint == null || materialSelectionMode == MaterialSelectionMode.NONE) {
+            return sorts;
+        }
+        if (materialSelectionMode == MaterialSelectionMode.SPECIAL_MATERIAL) {
+            if (type == PlannerTarget.TargetType.TOOL) {
+                sorts.add(MaterialSortEntry.HEAD_HARVEST);
+            }
+            return sorts;
+        }
+        if (selectedPart < 0 || selectedPart >= blueprint.materials.length) {
             return sorts;
         }
         PartMaterialType selectedPartType = blueprint.target.getRequiredComponents().get(selectedPart);
@@ -1926,6 +2128,9 @@ public class PlannerScreen extends GuiScreen {
             sorts.add(MaterialSortEntry.DURABILITY);
         }
         addAutomaticSorts(sorts, selectedPartType);
+        if (canUsePowerSort()) {
+            sorts.add(MaterialSortEntry.POWER);
+        }
         return sorts;
     }
 
@@ -2102,9 +2307,74 @@ public class PlannerScreen extends GuiScreen {
     }
 
     @Override
+    public void updateScreen() {
+        super.updateScreen();
+        if (searchField != null) {
+            searchField.updateCursorCounter();
+        }
+    }
+
+    private boolean matchesMaterialSearch(Material material, ItemStack tooltipStack) {
+        List<String> tooltip = Collections.emptyList();
+        if (isTooltipSearch() && tooltipStack != null && !tooltipStack.isEmpty() && mc.player != null) {
+            tooltip = tooltipStack.getTooltip(mc.player, ITooltipFlag.TooltipFlags.NORMAL);
+        }
+        return material != null && matchesSearch(material.getLocalizedName(), material.getIdentifier(), tooltip);
+    }
+
+    private boolean matchesSearch(String label, String identifier, List<String> tooltip) {
+        String query = getSearchQuery();
+        if (query.isEmpty()) {
+            return true;
+        }
+        if (!isTooltipSearch()) {
+            return normalizeSearchValue(label).contains(query) || normalizeSearchValue(identifier).contains(query);
+        }
+        for (String line : tooltip) {
+            if (normalizeSearchValue(line).contains(query)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isTooltipSearch() {
+        return searchText != null && searchText.trim().startsWith("#");
+    }
+
+    private String getSearchQuery() {
+        String query = searchText == null ? "" : searchText.trim();
+        if (query.startsWith("#")) {
+            query = query.substring(1).trim();
+        }
+        return normalizeSearchValue(query);
+    }
+
+    private String normalizeSearchValue(String value) {
+        String cleaned = TextFormatting.getTextWithoutFormattingCodes(value);
+        return cleaned == null ? "" : cleaned.trim().toLowerCase(Locale.ROOT);
+    }
+
+    @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         if (keyCode == mc.gameSettings.keyBindInventory.getKeyCode() || keyCode == 1) {
             mc.displayGuiScreen(parent);
+            return;
+        }
+        if (searchField != null && searchField.isFocused()) {
+            String previous = searchField.getText();
+            if (searchField.textboxKeyTyped(typedChar, keyCode)) {
+                searchText = searchField.getText();
+                if (!previous.equals(searchText)) {
+                    int cursor = searchField.getCursorPosition();
+                    refreshLayout();
+                    searchField.setFocused(true);
+                    searchField.setCursorPosition(Math.min(cursor, searchText.length()));
+                }
+                return;
+            }
+        }
+        if (keyCode == Keyboard.KEY_R && !hoveredRecipeStack.isEmpty() && JeiCompat.showRecipes(hoveredRecipeStack)) {
             return;
         }
         super.keyTyped(typedChar, keyCode);
@@ -2144,6 +2414,7 @@ public class PlannerScreen extends GuiScreen {
             GlStateManager.color(1F, 1F, 1F, 1F);
             GlStateManager.popMatrix();
             if (hovered) {
+                hoveredRecipeStack = stack.copy();
                 if (simpleTooltip) {
                     deferTooltip(Collections.singletonList(tooltip));
                 } else {
@@ -2228,7 +2499,6 @@ public class PlannerScreen extends GuiScreen {
 
         private void press() {
             selectedTraitFilterId = entry.id.equals(selectedTraitFilterId) ? null : entry.id;
-            materialPage = 0;
             refreshLayout();
         }
 
@@ -2393,6 +2663,13 @@ public class PlannerScreen extends GuiScreen {
             String modifierColor = getModifierTooltipColor(modifier);
             tips.add(modifierColor + modifier.getLocalizedName());
             tips.addAll(expandTooltipLines(modifierColor + modifier.getLocalizedDesc(), TextFormatting.GRAY));
+            List<String> itemNames = getModifierApplicationItemNames(modifier);
+            if (!itemNames.isEmpty()) {
+                tips.add(TextFormatting.AQUA + I18n.translateToLocal("gui.tpa.modifier_items"));
+                for (String itemName : itemNames) {
+                    tips.add(TextFormatting.GRAY + "- " + itemName);
+                }
+            }
             tips.add((canAdd ? TextFormatting.GREEN : TextFormatting.RED) + I18n.translateToLocal("gui.tpa.left_add"));
             tips.add((level > 0 ? TextFormatting.YELLOW : TextFormatting.DARK_GRAY) + I18n.translateToLocal("gui.tpa.right_remove"));
             return tips;
@@ -2530,8 +2807,8 @@ public class PlannerScreen extends GuiScreen {
                 }
                 return;
             }
-            materialPage = 0;
             activeSort = null;
+            selectedTraitFilterId = null;
             if (specialType == SpecialModifierType.EMBOSS) {
                 selectedPart = partIndex;
                 materialSelectionMode = MaterialSelectionMode.EMBOSS;
@@ -2594,6 +2871,7 @@ public class PlannerScreen extends GuiScreen {
             String text = fontRenderer.trimStringToWidth(label, availableLabelWidth);
             fontRenderer.drawString(text, x + 20, y + 5, entry.getTextColor());
             if (hovered) {
+                hoveredRecipeStack = icon.copy();
                 deferTooltip(entry.getTooltip());
             }
         }
@@ -2641,6 +2919,16 @@ public class PlannerScreen extends GuiScreen {
             }
         }
         return result;
+    }
+
+    private List<String> getModifierApplicationItemNames(IModifier modifier) {
+        Set<String> names = new LinkedHashSet<>();
+        for (ItemStack stack : getModifierDisplayStacks(modifier)) {
+            if (!stack.isEmpty()) {
+                names.add(stack.getDisplayName());
+            }
+        }
+        return new ArrayList<>(names);
     }
 
     private List<String> buildSpecialModifiersCache() {
@@ -2759,7 +3047,7 @@ public class PlannerScreen extends GuiScreen {
                 return readNumberField(stats, "modifier");
             }
         });
-        private static final MaterialSortEntry POWER = new MaterialSortEntry(ICON_SORT_GENERIC, "gui.tpa.sort.power", new ValueReader() {
+        private static final MaterialSortEntry POWER = new MaterialSortEntry(ICON_SORT_POWER, "gui.tpa.sort.power", new ValueReader() {
             @Override
             public double read(IMaterialStats stats) {
                 return 0;

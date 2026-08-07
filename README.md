@@ -13,9 +13,13 @@ In the planner screen, you can select a tool or armor type, then choose material
 
 The material list supports sorting. Common stats such as attack, mining speed, durability, armor, and toughness appear as sort buttons; special part stats added by some addon mods can also be detected and added automatically.
 
-Modifiers can be added or removed directly from the modifier list, making it easier to check the final result before crafting.
+The search box filters materials, traits, modifiers, and embossment options by localized name or registry ID. Prefix the query with `#` to search tooltip text. List pages retain their positions; Shift-clicking a page arrow moves five pages, Ctrl-clicking jumps to the first or last page, and the mouse wheel pages the list under the pointer.
 
-When selecting part materials, a trait filter list appears in the lower-left panel. If no specific material is selected, it shows traits available from materials usable by the current part. Once a material is selected, it only shows the traits that material provides on the current part. Clicking a trait filters the material list to materials with that trait.
+Modifiers can be added or removed directly from the modifier list, and their tooltips list the item names used to apply them. Fortified tool materials can also be sorted by harvest level.
+
+When selecting part or embossment materials, a trait filter list appears in the lower-left panel. If no specific material is selected, it shows traits available from materials usable by the current selection. Once a material is selected, it only shows the traits that material provides. Clicking a trait filters the material list to materials with that trait.
+
+When JEI is installed, hover a planner item icon and press `R` to open its JEI recipes. JEI remains optional.
 
 Finished plans can be exported as blueprint codes, and blueprint codes can be imported back into the planner. Blueprint messages in chat support copy, bookmark, and share actions, which makes it easier to pass plans around in multiplayer or during modpack testing.
 
@@ -67,7 +71,7 @@ The config file is created at:
 
 - `config/tinkersplannerantique/material_power.json`
 
-By default this feature is disabled, so it will not affect normal players or pack balance unless a modpack author opts in. To enable it, set `"enabled": true` in `material_power.json`. The generated file still includes a small set of general weights and tool/armor formula examples that can be edited for your pack. In the material list, left-click the material icon toggle to show or hide representative material icons, and right-click the same button to enable or cancel `Power` sorting after the feature is enabled.
+By default this feature is disabled, so it will not affect normal players or pack balance unless a modpack author opts in. To enable it, set `"enabled": true` in `material_power.json`. The generated file still includes a small set of general weights and tool/armor formula examples that can be edited for your pack. In the material list, the material icon button shows or hides representative material icons, while the separate nether-star button toggles `Power` sorting after the feature is enabled.
 
 Generated config files include `_comment_*` fields with bilingual descriptions. These fields are ignored by the loader and can be kept in the file.
 
@@ -90,7 +94,15 @@ You can also enable formula scoring:
 }
 ```
 
-When `formula.enabled` is true, the matching formula is used instead of the weight-sum result. `tool_expression` is used for tools and weapons, `armor_expression` is used for armor, and `expression` is the common fallback when the target-specific field is empty. Supported operators are `+`, `-`, `*`, `/`, `**`, and parentheses. Supported functions are `min`, `max`, `avg`, `abs`, `sqrt`, `sign`, and `clamp`. Invalid, infinite, or NaN formula results are treated as `0` so sorting remains stable.
+When `formula.enabled` is true, the matching formula is used instead of the weight-sum result. `tool_expression` is used for tools and weapons, `armor_expression` is used for armor, and `expression` is the common fallback when the target-specific field is empty.
+
+Formula syntax:
+
+- Operators: `+`, `-`, `*`, `/`, `**`, and parentheses.
+- Functions: `min(...)`, `max(...)`, `avg(...)`, `abs(x)`, `sqrt(x)`, `log(x)`, `floor(x)`, `ceil(x)`, `round(x)`, `sign(x)`, and `clamp(x,min,max)`.
+- Stat variables: exact fields such as `head.attack` and `extra.durability`, plus wildcard fields such as `*.durability`.
+- Trait variables: `traits.total`, `traits.sum`, `traits.average`, `traits.max`, `traits.count`, and single trait values such as `trait.ecological`.
+- Missing variables, invalid expressions, infinite results, and NaN results are treated as `0` so sorting remains stable.
 
 Available variables include stat fields such as `head.attack`, `extra.durability`, and wildcard fields such as `*.durability`. Trait variables include `traits.total`, `traits.sum`, `traits.average`, `traits.max`, `traits.count`, and `trait.<trait_id>`. The `stats` and `traits` tables are still useful in formula mode because trait variables are based on the configured trait weights, and `/ticpa test print power` also includes the weight-mode breakdown for comparison.
 
@@ -153,9 +165,13 @@ Config
 
 材料列表支持排序。常见属性如攻击力、挖掘速度、耐久、护甲值、护甲韧性等会显示为排序按钮；部分附属模组添加的特殊部件属性也会自动识别并加入排序项。
 
-强化列表可以直接添加或移除强化，方便你在制作前确认最终结果。
+搜索框可以按本地化名称或注册名筛选材料、特性、强化和刻印选项；使用 `#` 前缀可以搜索 tooltip 文本。各列表会保留页码；Shift 点击翻页按钮会移动五页，Ctrl 点击会跳到首页或末页，鼠标滚轮会翻动指针所在的列表。
 
-部件材料选择时，左下角会显示特性筛选列表。未选中具体材料时，它会显示当前部件可用材料拥有的特性；选中某个材料后，则只显示这个材料在当前部件上的特性。点击特性可以筛选出拥有该特性的材料。
+强化列表可以直接添加或移除强化，并在 tooltip 中列出强化所需物品的名称。工具的强化材料也可以按挖掘等级排序。
+
+选择部件材料或刻印材料时，左下角会显示特性筛选列表。未选中具体材料时，它会显示当前选项可用材料拥有的特性；选中某个材料后，则只显示这个材料提供的特性。点击特性可以筛选出拥有该特性的材料。
+
+安装 JEI 时，将鼠标悬停在蓝图界面的物品图标上并按 `R`，即可打开对应的 JEI 配方；JEI 仍为可选依赖。
 
 设计好的蓝图可以导出为蓝图码，也可以从蓝图码导入。聊天中的蓝图码消息带有复制、收藏和分享功能，方便在多人游戏或整合包测试时传递方案。
 
@@ -207,7 +223,7 @@ Config
 
 - `config/tinkersplannerantique/material_power.json`
 
-默认情况下该功能关闭，因此不会在整合包作者主动启用前影响普通玩家或整合包平衡。需要启用时，将 `material_power.json` 中的 `"enabled"` 改为 `true`。生成的文件仍会保留一组通用权重和工具/护甲公式示例，方便按整合包需求编辑。在材料列表中，左键材料图标切换按钮可以显示或隐藏材料代表物图标；功能启用后，右键同一个按钮可以开启或取消 `总评` 排序。
+默认情况下该功能关闭，因此不会在整合包作者主动启用前影响普通玩家或整合包平衡。需要启用时，将 `material_power.json` 中的 `"enabled"` 改为 `true`。生成的文件仍会保留一组通用权重和工具/护甲公式示例，方便按整合包需求编辑。在材料列表中，材料图标按钮用于显示或隐藏材料代表物图标；功能启用后，独立的下界之星按钮用于开启或取消 `总评` 排序。
 
 生成的配置文件会包含 `_comment_*` 字段作为双语说明。这些字段会被读取器忽略，可以保留在文件中。
 
@@ -230,7 +246,15 @@ Config
 }
 ```
 
-当 `formula.enabled` 为 `true` 时，会优先使用匹配公式结果，而不是权重相加结果。`tool_expression` 用于工具和武器，`armor_expression` 用于护甲，`expression` 是目标专用字段为空时使用的通用回退公式。公式支持 `+`、`-`、`*`、`/`、`**` 和括号；函数支持 `min`、`max`、`avg`、`abs`、`sqrt`、`sign` 和 `clamp`。无效、无穷大或 NaN 的公式结果会按 `0` 处理，以保证排序稳定。
+当 `formula.enabled` 为 `true` 时，会优先使用匹配公式结果，而不是权重相加结果。`tool_expression` 用于工具和武器，`armor_expression` 用于护甲，`expression` 是目标专用字段为空时使用的通用回退公式。
+
+公式语法：
+
+- 运算符：`+`、`-`、`*`、`/`、`**` 和括号。
+- 函数：`min(...)`、`max(...)`、`avg(...)`、`abs(x)`、`sqrt(x)`、`log(x)`、`floor(x)`、`ceil(x)`、`round(x)`、`sign(x)` 和 `clamp(x,min,max)`。
+- 属性变量：`head.attack`、`extra.durability` 这类精确字段，以及 `*.durability` 这类通配字段。
+- 特性变量：`traits.total`、`traits.sum`、`traits.average`、`traits.max`、`traits.count`，以及 `trait.ecological` 这类单个特性值。
+- 缺失变量、无效表达式、无穷大结果和 NaN 结果都会按 `0` 处理，以保证排序稳定。
 
 可用变量包括 `head.attack`、`extra.durability` 这类具体属性字段，也包括 `*.durability` 这类通配字段。特性相关变量包括 `traits.total`、`traits.sum`、`traits.average`、`traits.max`、`traits.count` 和 `trait.<trait_id>`。公式模式下 `stats` 和 `traits` 表仍然有用，因为特性变量基于配置的特性权重生成，且 `/ticpa test print power` 会同时导出权重模式的拆解结果用于对照。
 

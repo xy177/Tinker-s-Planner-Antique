@@ -192,15 +192,13 @@ public final class PlannerClientEvents {
             event.getButtonList().add(openButton);
         } else if (isArmorStationGui(gui)) {
             openButton = createOpenButton(gui);
+            event.getButtonList().add(openButton);
         }
     }
 
     @SubscribeEvent
     public static void onDrawScreenPost(GuiScreenEvent.DrawScreenEvent.Post event) {
         if (openButton != null && openButton.owner == event.getGui()) {
-            if (isArmorStationGui(event.getGui())) {
-                openButton.drawLateIcon(Minecraft.getMinecraft(), event.getMouseX(), event.getMouseY());
-            }
             openButton.drawTooltip(Minecraft.getMinecraft(), event.getMouseX(), event.getMouseY());
         }
         drawAssemblyNotice(event.getGui());
@@ -319,10 +317,20 @@ public final class PlannerClientEvents {
 
     private static class PlannerOpenButton extends GuiButton {
         private final GuiScreen owner;
+        private final int renderX;
+        private final int renderY;
 
         private PlannerOpenButton(GuiScreen owner, int x, int y) {
-            super(OPEN_BUTTON_ID, x, y, 20, 20, "");
+            this(owner, x, y, isArmorStationGui(owner));
+        }
+
+        private PlannerOpenButton(GuiScreen owner, int x, int y, boolean hideArmorDecorations) {
+            super(OPEN_BUTTON_ID, hideArmorDecorations ? -10000 : x, hideArmorDecorations ? -10000 : y,
+                    hideArmorDecorations ? 0 : 20, hideArmorDecorations ? 0 : 20, "");
+            // ConArm decorates every listed button, so its decoration coordinates stay off-screen.
             this.owner = owner;
+            this.renderX = x;
+            this.renderY = y;
         }
 
         @Override
@@ -334,16 +342,14 @@ public final class PlannerClientEvents {
             drawIcon(mc);
         }
 
-        private void drawLateIcon(Minecraft mc, int mouseX, int mouseY) {
-            if (!visible) {
-                return;
-            }
-            updateHovered(mouseX, mouseY);
-            drawIcon(mc);
+        @Override
+        public boolean mousePressed(Minecraft mc, int mouseX, int mouseY) {
+            return enabled && visible && mouseX >= renderX && mouseY >= renderY
+                    && mouseX < renderX + 20 && mouseY < renderY + 20;
         }
 
         private void updateHovered(int mouseX, int mouseY) {
-            hovered = mouseX >= x && mouseY >= y && mouseX < x + width && mouseY < y + height;
+            hovered = mouseX >= renderX && mouseY >= renderY && mouseX < renderX + 20 && mouseY < renderY + 20;
         }
 
         private void drawIcon(Minecraft mc) {
@@ -355,7 +361,7 @@ public final class PlannerClientEvents {
             GlStateManager.enableBlend();
             GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
             GlStateManager.color(1F, 1F, 1F, hovered ? 1F : 0.8F);
-            drawModalRectWithCustomSizedTexture(x + 2, y + 2, 0, 0, 16, 16, 16, 16);
+            drawModalRectWithCustomSizedTexture(renderX + 2, renderY + 2, 0, 0, 16, 16, 16, 16);
             GlStateManager.color(1F, 1F, 1F, 1F);
             GlStateManager.enableDepth();
             GlStateManager.popMatrix();
